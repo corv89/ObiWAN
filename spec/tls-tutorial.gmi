@@ -1,0 +1,77 @@
+# TLS, client certificates, TOFU, and all that jazz
+
+This document is under construction!
+
+## Introduction
+
+Gemini makes it mandatory to protect connections using TLS.  Not only that, but it supports the use of client certificates and alternative certificate validation schemes, which are unfamiliar to a lot of people.  For many would-be Gemini developers, this is the hardest part of the whole thing.  This document aims to provide a gentle introduction to the relevant concepts.  It's not super detailed or precise: the goal is to allow people to understand and reason about how this stuff works at a level of abstraction above all the cryptographic details.
+
+This isn't a completely "from scratch" explanation.  This document assumes that you are familiar with some basic concepts from asymmetric (or "public key") cryptography; not the mathematics of how and why it all works, but the conceptual big picture.  Basically, you should feel comfortable with the ideas of:
+
+* Key pairs, i.e. matched public and private keys, which have the property that what is encrypted with one can only be decrypted with the other
+* Digital signatures, i.e. that people can use their private key to "sign" some digital content in a way which others can validate using their public key, that said signatures cannot be forged, and they protect the signed content against modification
+
+## Certificate basics
+
+### What's a TLS certificate?
+
+For our purposes, you can think of a TLS certificate as a combination of the following things:
+
+* A public key
+* Some metadata about the party who allegedly owns that public key - called the "subject" of the certificate
+* A digital signature over the entire certificate
+* Some metadata about the party who signed the certificate - called the "issuer" of the certificate
+* An expiry date
+
+The metadata about the subject and the issuer have the same structure.  The fancy term is that a certificate contains the "Distinguished Name" (DN) of the subject and the issuer.  A DN has multiple fields in it, but the most important one is the so-called "Common Name" (CN).  It needn't be, but in typical real-world use the subject's CN is almost always a hostname, like `paypal.com`.
+
+There can be, and in practice often is, more to a certificate than this, but these are the core features you'll need to understand to follow the rest of this article.  A lot of the time you can forget about the expiry date and just think of the certificate as a public key, the name of somebody who claims to own it, and the name and signature of somebody who certifies (hence the name!) that claim as true.
+
+### How are TLS certificates typically used?
+
+Suppose you are the legitimate operator of the server named `example.com`.  The "normal" way to use TLS is for you to contact a trusted third party, called a "Certificate Authority" (CA), and say "Hello CA, my DN is bla, bla, bla, and in particular my CN is example.com.  This blob of bytes right here is my very own public key".  The CA "does something" to convince itself that you are, indeed, the legitimate operator of example.com, and then they use their private key to sign a certificate, which features your DN (as the subject), their own DN (as the issuer), plus an expiry date.  You then setup your webserver, mailserver, whatever to hand out that certificate when clients make TLS certificates to it.
+
+On the client side of things, web browsers and/or operating systems usually come with a big pile of public keys for recognised CAs pre-installed.  When somebody connects to your webserver and gets your certificate, they can use your CA's DN to find that CA's public key in their pile, and then they can validate the signature in your certificate.  If the signature is valid, this tells them that, indeed, that particular fine and upstanding CA has done something to convince itself that the public key in that certificate does indeed belong to example.com.  Since the client trusts the CA, they accept that this public key is genuine and (assuming the expiry date has not passed) everything is good: the client and server use the authenticated public key to bootstrap a secure channel, via a complicated process which actually has very little more to do with the certificate.
+
+### Why is all this necessary?
+
+Suppose when a client connected to example.com, the server just sent a bare public key down the line instead of a certificate.  The client could still use that key to encrypt the information it sent to the server, and that information would be secure from eavesdroppers.  This risk is that somebody who can not only eavesdrop on the connection but can also interfere in more active ways - like the client's or server's ISP, or somebody who has fooled the client's DNS provider into resolving example.com to their own server - could act as a so-called "Man in the Middle" (MitM).  When the client tries to connect to the server, the attacker sends their *own* public key back to the client instead.  At the same time, they connect to the intended server, receiving the server's actual public key.  The attacker uses their own private key to decrypt whatever they get from the client, then re-encrypts it using the server's public key before sending it to the server - and vice versa in the other direction.  The client and server can still talk to one another and everything seems to work, but the attacker can read it all, even though the client and server encrypted everything.
+
+In order to prevent this, the client needs to know that whatever public key comes down the line really does belong to example.com, and not some random attacker who has intercepted the connection and substituted their own key.  Make no mistake, this is a very difficult problem.  There are many possible solutions, all with different pros and cons.  The mainstream solution on today's internet is to use certificates signed by CAs.  It basically involves outsourcing the difficult job of establishing who really owns which public key to a small number (relative to the number of computers on the internet) of trusted parties (the CAs) who are expected to do a good job of this.
+
+Thus, if you get away from the technical details of what's *in* a TLS cert and what computers do with them, and think about them instead in terms of the *role* they play, TLS certs are a way for one party (the issuer) to vouch for the validity of another party's claim (the subject's claim that "this key is mine") in a way that will convince anybody who has a pre-existing trust relationship with the issuer (by having the issuer's public key and hence being able to validate their digital signature).
+
+### Okay, so with the CA system this MitM problem is solved?
+
+Well, yes and no.
+
+Some people aren't really happy with the security provided by the CA system.  Unless you pile a lot of extra stuff on top of the simple validation procedure outlined above, *any* CA whose public key is pre-installed with your browser or your operating system can sign a certificate for *any* hostname, and your system will happily accept it.  That can be a list of literally hundreds of CAs, owned by companies or governments from all over the world, which you may actually have wildly varying levels of trust in (realistically, you won't have heard of or previously interacted with the majority of them).  If your system will accept a certificate from any of them, the whole system is only as strong as the weakest CA: the CA who does the least careful checking of claims to own a public key, or the CA with the worst internet security who gets their private key stolen, or the CA with the most easily bribed employees, or the CA whose government has the most legal power to compel them to sign a phony certificate under threat of prison or worse.  The weakest CA might be quite weak indeed, and if it is discovered that a certain CA has "gone rogue" it can be a lot of work and take a lot of time to remove its public key from each and every device which had it installed.
+
+Some people are less concerned about the security provided by the CA system, and are instead unhappy for political or philosophical reasons that the whole system is based primarily on a relatively small number of private, for-profit corporations running expensive, centralised infrastructure, who charge end users money (sometimes a lot of money) for certificates.
+
+### What are self-issued and self-signed certificates?
+
+A certificate is "self-issued" if the subject and the issuer are the same entity, and "self-signed" if it is signed using the private key corresponding to the public key it contains.  A certificate can be self-issued without being self-signed, and vice-versa, but the most common case (and the one most people are thinking of when they talk about "self-signed certificates") is for a certificate to have both of these properties.
+
+Self-signed certificates aren't compatible with the typical usage of certificates: they don't function as a way to establish trust in the ownership of a public key, because there is no third party, like a CA, which the client already trusts and which the server has authenticated itself to.  Anybody can make a self-signed certificate with whatever subject CN they like.  If you use a self-signed certificate for your server, there's no way for a client to distinguish it from one cooked up by an attacker for a MitM attack - at least not just by looking at the certificate and validating the signature.  This is the reason self-signed certificates are typically thought of as insecure.
+
+This is not a small problem, but it's important to understand that the difference between a self-signed certificate and a CA-signed one is entirely a matter of whether or not you can establish, just by inspecting the certificate itself, that the contained public key really belongs to the contained hostname.  The contained public key itself is no different from and in no way inferior to the public key in a CA-signed certificate, and there'd be no difference in the strength of the cryptography that resulted from using that key.  This means that in situations where:
+
+* you can establish that the key really belongs to the hostname via some other means, or
+* verifying who owns the key is not actually important
+
+self-signed certificates are a perfectly valid thing to use.
+
+You might be wondering: what is the value of using a self-signed certificate instead of just using a public key by itself?  The answer is, in fact, very little, and there are lots of secure protocols which use bare public keys without certificates.  But TLS is built completely around the concept of CA-signed certificates and doesn't provide a way to use public keys in isolation.  You can think of self-signed certificates as a hack to work around this: they let us use the pre-existing TLS technology stack but opt out of the CA system.
+
+## Client certificates
+
+Coming soon.
+
+## TOFU
+
+Coming soon.
+
+## Practical questions
+
+Coming soon.

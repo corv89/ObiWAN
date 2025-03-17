@@ -1,0 +1,621 @@
+# Gemini Application Developer Guide
+
+v1.0.0, September 2nd 2024
+
+This developer guide will help you understand the various technical details related to Gemini applications — programs running on a Gemini server — and help you design and build applications of your own.
+
+The guide assumes that you are familiar with the core concepts of computer networking and the internet, such as servers and clients, URLs, and sending and receiving data over a TCP stream. Programming skills in some language are required, and you are assumed to already be running a Gemini server that supports CGI. Example code is shown in Python but the same results can be achieved with other languages.
+
+If you have any questions or suggestions for additional topics, spotted a mistake, or have other feedback, please contact either
+=> gemini://skyjake.fi/ skyjake
+or
+=> gemini://zaibatsu.circumlunar.space/~solderpunk/ Solderpunk.
+
+## Introduction
+
+The Gemini protocol is intentionally constrained. A document received by a Gemini client is expected to be static content, and the client can choose how to present it to the user. This means that unlike on the web, where JavaScript runs increasingly complex tasks inside the client, any dynamic behavior and "business logic" must take place on the server.
+
+The Gemini software ecosystem is quite heterogeneous: there are multiple server and client implementations, so for things to remain interoperable, both servers and clients must strictly adhere to the protocol specification and not make any implementation-specific enhancements. This means that any client, even one that you have written yourself, has access to the full extent of Geminispace, including all its most complex applications. When creating your own applications, consider that it may be accessed by a wide variety of clients, including ones that are graphical or text-based, or even ones that have non-visual, audio-only interfaces.
+
+To get a sense of what Gemini applications can be like in practice, here is a sampling of interactive capsules:
+
+=> gemini://kennedy.gemi.dev         Search engine
+=> gemini://station.martinrue.com    Microblogging site
+=> gemini://bbs.geminispace.org      Bulletin board system
+=> gemini://astrobotany.mozz.us      Gardening game
+=> gemini://spellbinding.tilde.cafe  Word spelling game
+
+## Overview of the guide
+
+* Section 1 "Getting started with CGI": what is CGI and how to use it.
+
+* Section 2 "User interface": the look and feel of a Gemini application; how it appears and behaves from the user's point of view.
+
+* Section 3 "Receiving input": how to receive and handle input from users.
+
+* Section 4 "Sessions and users": how to implement user accounts and keep track of sessions comprising multiple requests.
+
+* Section 5 "Security considerations": what security aspects should be considered, and threats to protect against.
+
+* Section 6 "Technical notes": additional details to consider in the implementation.
+
+# 1. Getting started with CGI
+
+The Common Gateway Interface (CGI) is an interface specification that enables web servers to run external programs to handle user requests. Many Gemini servers have adopted the same interface, with a few minor additions for Gemini-specific information. CGI is therefore the easiest way to get started with creating applications for Gemini.
+
+The idea is straightforward: when a request comes in, the server executes an external CGI program with environment variables describing the request, and sends the output of the CGI program to the client.
+=> https://en.wikipedia.org/wiki/Common_Gateway_Interface  Common Gateway Interface (Wikipedia)
+
+## 1.1 Basic example
+
+Let us begin by taking a look at a basic Gemini CGI program on a UNIX-like operating system. This will give you a simple template on which you can start building your application.
+
+```Python CGI script
+#!/usr/bin/python3
+import os
+print('20 text/gemini\r')
+print('Hello from CGI,', os.getenv('REMOTE_ADDR'))
+```
+
+This short script first prints the Gemini response header and then prints the body of the page. The value of the `REMOTE_ADDR` environment variable is read with `os.getenv`. You can flag this script as an executable and copy it to the server's "cgi-bin" directory from where it can be automatically executed when the corresponding path is requested by a client.
+
+That is basically all there is to it! CGI is a simple and straightforward interface.
+
+If you wish to know more, @tomasino@tilde.zone has prepared further introductory materials:
+
+=> gemini://tilde.team/~tomasino/journal/20220221-sample-cgi-application.gmi tomasino: A Sample CGI Application
+=> gemini://tilde.team/~tomasino/journal/20211227-gemini-input.gmi tomasino: Gemini Inputs (YouTube video)
+
+## 1.2 Environment variables
+
+There may be server-specific differences in the CGI environment, but typically the following variables are available:
+
+* `SCRIPT_NAME`: path of the CGI executable
+* `PATH_INFO`: trailing pathname information that follows an actual filename or non-existent file in an existing directory
+* `QUERY_STRING`: query text (may be empty)
+* `REMOTE_ADDR`: client IP address and port number
+* `AUTH_TYPE`: "Certificate" when a client certificate is used, otherwise empty
+* `TLS_CLIENT_HASH`: SHA-256 sum of the client certificate
+* `TLS_CLIENT_SUBJECT`: client certificate Subject common name
+* `TLS_CLIENT_ISSUER`: client certificate Issuer common name
+
+# 2. User interface
+
+A key part of application design, and also programming in general, is to separate the public interface from the internal implementation. The needs of the human user and the internal technical implementation are very different and often at odds with each other.  Nevertheless, both facets of an application are crucial; you should not let the internal implementation compromise the public interface, or vice versa.
+
+In practice, when it comes to Gemini applications, the user interface is built out of one or more dynamically generated Gemtext ("text/gemini") pages.
+
+Gemtext is quite a limited format for user interface presentation, which makes for an interesting design challenge. One issue is that the UI of your application should work — or at least strive to work — equally well with every Gemini client out there. Especially you should be wary of testing your application only on high-end graphical clients, where you have sophisticated page layout, multiple fonts, and color schemes that clarify the structure of the page. When viewing such pages in a terminal-based client, things may look different in unexpected ways. For example, clients may display links in different ways, and since links are used for most user actions and menus, it is important for them to remain legible and accessible. Still, Gemtext is simple enough that by following a few basic rules, you can achieve good results everywhere. One rule of thumb is that your UI should be comprehensible even when viewed as a plain-text Gemtext source file without any visual formatting.
+
+In this section, we will take a closer look at the options and tools at your disposal when it comes to the UI.
+
+## 2.1 Structure and path hierarchy
+
+Begin your UI design by considering what kind of high-level structure the application should have. Your UI will be constructed out of a URL path hierarchy and, on each page, links, headings and whitespace that delineate the content into different sections.
+
+As websites have been growing more and more complex, web browsers have been gradually phasing out visibility of the current page's URL, because it may mostly appear as visual noise to the user. Gemini clients typically do not do this, and one should consider the URL and its structure as part of the UI of the application.
+
+Tying the path hierarchy to the application's user-visible objects is useful because it is one way to communicate structure to the user and it enables clients to navigate the hierarchy more conveniently. For example, one can go up one directory level or go all the way to the root of the hierarchy. When it comes to CGI applications, there is no need to expose your local directory structure in URLs, even if you are serving files from directories. The URL directory structure can use an entirely virtual hierarchy, so always consider first what makes sense from the point of view of the user.
+
+If the directory hierarchy is deep, you may find that you are not actually using all the intermediate subdirectories along the path. It is good to use the client's "go up" or "go to parent" navigation features to check that each level of the URL hirerachy returns some meaningful content. One option is to respond with a redirect from parts of the path that are not very useful on their own, or have not been implemented in your application.
+
+Finally, as a matter of taste and if your server supports it, consider leaving out any "/cgi-bin/" prefixes out of your URLs. Removing unnecessary components makes the URL easier to read, understand, and remember, thus helping the user navigate your application more easily. Technical implementation details such as "cgi-bin" should not pollute the user interface of your application, causing distraction and potential confusion.
+
+## 2.2 Menus
+
+Menus are a very common UI element. A basic menu is a list of links:
+```
+=> inbox/     Inbox
+=> outbox/    Outbox
+=> settings/  Settings
+=> ../        Exit
+```
+
+You should strive to separate menus from normal content to make the UI more intuitive; the interactive parts should be distinct and identifiable at a glance. The easiest and most obvious method is to surround menus with empy lines. Overall, remember that the use of whitespace is a big part of any design language and this applies to Gemtext-based UIs as well, especially because the specification requires clients to retain empty lines when laying out the page. There is a difference between one and two (or more) empty lines, and this can be used for different types of sectioning. Keep the use of whitespace consistent to help communicate the structure of the UI to the user.
+
+One popular method to make menu items distinct is to employ Emoji as action icons. These additional visual cues can make the menu more glanceable and facilitate repeated access. Once one learns which actions are available in the menu, one can quickly locate the desired action just by looking at the icons.
+```
+=> inbox/     📥 Inbox
+=> outbox/    📤 Outbox
+=> settings/  ⚙️ Settings
+=> ../        ↩️ Exit
+```
+Which looks like this in your client:
+
+=> inbox/     📥 Inbox
+=> outbox/    📤 Outbox
+=> settings/  ⚙️ Settings
+=> ../        ↩️ Exit
+
+While Gemtext defaults to UTF-8 and clients are assumed to generally support Unicode, Emoji are not universally available in all clients. The exact visual appearance of Emoji depends on the fonts available to the client, and particularly terminal-based TUI clients may have difficulty displaying Emoji properly. Therefore, you can use Emoji as secondary visual cues, but do not rely on them as independent interface element without any descriptive labels. One option for dealing with this is to have a setting for displaying ASCII-based "icons" instead of Emoji. In any case, ensure that the UI is legible and usable without Emoji as well, even though they may be the preferred visualization mode for actions.
+
+A menu with several actions will become very tall when viewed in a client, because links are typically each displayed on their own line. A long menu is difficult for the user to read through and this will obscure other parts of the page — one has only so much vertical space in a client. If your menu seems to grow too long, you can split off parts in submenus that open new pages with more actions. Organizing submenus in a logical fashion is important. If a logical hierarchy is difficult to construct, another approach is to consider how frequently each action is needed and split off infrequent ones behind a "More..." link.
+
+When it comes to labeling actions, consistency should be the first priority. One recommended pattern to follow is to make every action label an unambiguous command using verbs in imperative form:
+```
+=> inbox/     📥 View inbox
+=> outbox/    📤 View outbox
+=> settings/  ⚙️ Configure settings
+=> ../        ↩️ Exit
+```
+
+Placing a menu at the top of a page makes it easy for the user to find it and choose an action. However, this also means the menu takes priority over actual page contents and one may need to scroll past the menu to get to the content. Forcing the user to do this repeatedly may get annoying. Therefore, keep menus at the top as short as possible, with only the most commonly needed actions. For the rest of the actions, consider a secondary menu at the bottom of the page, following the actual page content. Many clients have a feature that allows instantly jumping to the bottom of the page, so this menu can be quickly accessed as well, although the user may not discover it as easily. A menu at the bottom can be longer and it can feature infrequently needed items, as the bottom area is out of the way.
+
+If you need multiple menus on the same page, consider giving them titles with heading lines. Some clients support an outline view and/or navigating to specific headings on a page, so this can help locate the right menu without scrolling around too much.
+
+## 2.3 Preformatted blocks
+
+Gemtext's visual limitations may tempt you to spice up the UI with "graphical" elements inside preformatted text blocks. Used tastefully, these will give the application a unique identity and appearance, and may help the user understand the structure of the UI more intuitively: a graphical element catches the eye, helping draw attention to a specific region of the page. However, if these elements are overused, the UI becomes unwieldy. A nice piece of ASCII art is great for welcoming users on the application's front page, but one wouldn't want to scroll over one on every page to access the application's core functions. As a rule, less is more.
+
+Preformatted blocks will limit your UI's adaptibility to different viewing devices, because as a rule clients will respect the formatting inside the block and not apply, say, additional line wrapping. Consider different screen and font sizes, and text-to-speech accessibility. Always include something meaningful in the "alt text" section of the preformatted block. It could be a textual version of the block's contents, a summary of the presented information, or some other explanation of the purpose of the block. This way, the UI will be more accessible to non-visual users.
+
+## 2.4 Lists
+
+Lists are another commonly needed UI element. For example, your application may need to display a set of inventory items, discussion threads, or search results. Gemtext has a line type for bulleted lists, but it is more suited for prose rather than a user interface, especially if the listed items are also accompanied by action links. If you mix up too many Gemtext line types when presenting an item, the result may be difficult for the user to understand particularly if they have a different client than what you are used to. Some clients' visual representation of the line types may be incompatible with the needs of your UI.
+
+One solution that seems to work rather well is the "social sandwich", first seen on station.martinrue.com:
+
+```Example: Gemtext source code showing links and content lines that comprise two different items.
+=> /header/1 Header action
+First item's content paragraph with a maximum length and limited formatting.
+=> /footer/1 Footer action
+
+=> /header/2 Header action
+Second item's content paragraph with a maximum length and limited formatting.
+=> /footer/2 Footer action
+```
+
+Each item is composed of a single line of content that uses no special formatting. (If this is user-submitted content, Gemtext formatting needs to be stripped out.) The length of the line is limited to some reasonable application-dependent width keep a single item from using too much space on the page. The content is preceded and followed by an action link, without any blank space between the three lines. The items are separated by one or more blank lines.
+
+The header and footer actions can be chosen as appropriate for the application, and either one can be omitted if there is no need for two separate actions. In a social application with discussion threads, for example, the header action could link to the original poster's account, and the footer action could link to the discussion thread itself. Special attention should be placed on the labeling of these actions. An Emoji prefix helps make the header and footer more distinct and recognizable at a glance. Especially the header labels should be short to keep the main attention on the content line, so the reader is not distracted by a lot of metadata before getting to the content.
+
+## 2.5 Navigation links
+
+If your application is complex enough to have multiple pages or a directory hierarchy, you should carefully consider how the user will be navigating inside it. In practice, this happens via navigation links. It is important to present these links consistently, as it will help the user understand the application's structure and make navigating the application more fluent.
+
+The primary navigation actions are typically found at the top menu of the page where they are instantly visible to the reader. The placement of the navigation links should remain the same from page to page, so the user does not have to keep looking for them. Secondary navigation actions could be placed at the bottom of the page, for reaching locations that are less frequently needed or only indirectly related to the current page.
+
+If you provide "Back to X" actions for returning to a previous location, not that you may not actually know what "X" is supposed to be. Your application would need to record the previous request(s) performed by the user to know if returning to a particular page is appropriate. Even so, the user could manually type in a URL or access a specific page via a bookmark, without visiting any previous page beforehand. Generally speaking, relying on the client's built-in backwards navigation is more reliable as it always gets the previous location right. However, obsolete data may then be seen by the user. The Gemini protocol has no way to control client-side caching, letting clients decide to cache visited pages as they see fit. Your application should generally allow reloading the page without performing an action in case the user backwards-navigated and wants to refresh the page.
+
+If the application is more of a single-page state machine, like a game where you perform actions but always stay on a status page, query strings could be used as the primary navigation method. You should not mix query strings and directory hierarchies for navigation purposes, though. Query strings are generally meant for input from the user, while directories can be navigated with "Go Up"/"Go to Parent" client actions.
+
+## 2.6 Tips
+
+* Open up a blank .gmi file in your favorite text editor and write, by hand, a prototype version of your UI. You can preview the results in a client and fine-tune the prototype until you are happy with how it looks. Don't forget to try it in both graphical and text-based clients. When you are happy with the prototype, you can use it as a concrete starting point for building the application.
+
+* `PATH_INFO` can use useful for structuring the application if your server only supports CGI via executable programs. The executable can then represent the root directory of the application and all the subdirectories and files exist only virtually as part of the URL path. Remember, the path in the URL and the files on disk do not have to match in any way.
+
+* People may accidentally click on links in their client, for example when they are using your application on their phone. It is good to allow easily undoing such one-click actions (if appropriate) or adding a second step that confirms the user's intent. Such confirmation can be handled with status 1x or with an intermediate page that has "Yes, I am sure" and "Cancel" actions. The latter is useful for displaying more contextual information about the action.
+
+# 3. Receiving input
+
+The fundamental difference between a static Gemini capsule and a Gemini application is that the latter does something dynamic based on input provided by the user.
+
+From the user's point of view, the possible methods for providing input are:
+
+* Opening a link in their client that causes an action in the application.
+* Entering text into an input prompt.
+* Sharing information via name fields of a TLS client certificate. (Section 3.2 goes into more detail about client certificates.)
+* Sending data using other protocols, like SFTP, e-mail, or Titan.
+
+When it comes to non-Gemini protocols, for the purposes of this guide, we will ignore them. As a rule, attempt to make your application fully usable with nothing but Gemini requests. This makes it compatible with all the clients out there. (Even the one that you one day may write yourself!) When it comes to your application, consider which other protocols would make sense for a substantially improved user experience and whether it provides significant enough benefit to justify the implementation cost. The important thing to keep in mind is that Gemini is best suited for sending small amounts of data (1024 bytes) at a time, so larger amounts are more convenient to send via other means.
+
+On server-side, the application typically runs inside a CGI environment launched by the server, where your code is able to access all relevant parts of incoming requests via environment variables. It is also possible that your application responds to Gemini requests directly, but that requires code for manually handling incoming TLS connections. (See section 6 for discussion about applications that run as a standalone server.) For now, let us assume that the application runs via CGI.
+
+## 3.1 Queries
+
+The following flow illustrates how a query is performed:
+
+1. Client requests a URI where input is expected, but does not provide any.
+2. Application responds with status 10 and a human-readable prompt to show to the user.
+3. Client receives text from the user and requests the URI again, this time appending the UTF-8 input text as the URI query string (percent-coded).
+4. Application processes the received input.
+
+An important note regarding the first step: applications are allowed to make a distinction between a missing query string and an empty query string. In other words, the following two URIs can be treated differently:
+
+* /my-app/search
+* /my-app/search?
+
+This can be useful because the query-string-less URI is meaningful as an action link, while the latter occurs when the user submits a zero-length input string as a response to status 1x. Depending on your application, the latter case can be handled by prompting for input again (with another status 1x respones) or by treating the empty string as the input value (clearing the value of a setting, perhaps). However, the caveat is that the CGI specification does not make this distinction: empty and missing query strings both result in `QUERY_STRING` being set to "" in the environment (RFC 3875, section 4.1.7). Depending on how your Gemini server behaves, this may or may not limit your implementation.
+
+Sometimes it is useful to have a sequence of multiple queries one after another:
+
+1. Client requests a URI.
+2. Application responds with status 10.
+3. Client requests the URI with query string attached.
+4. Application responds with status 10 again, but a different prompt.
+5. Client requests the URI with a different query string attached.
+6. Application responds with status 20.
+
+There are a couple of important things to note here:
+
+* The application must maintain per-user state to know which step the user is currently at, to differentiate between steps 2, 4, and 6.
+
+* The client may cancel the input or navigate backwards before steps 3 or 5. Client behavior regarding status 10 responses may vary; some clients may return back to the most recent status 20 response, and some may repeat the previous request that led to a status 10. Even so, the application should allow gracefully restarting the sequence from the initial state.
+
+### Decoding the request
+
+User-provided data most often comes in to your application via the request URI. To a CGI application, the data is available as the `PATH_INFO`, `PATH_TRANSLATED`, and `QUERY_STRING` environment variables. Even if you are only ever using the decoded versions of the data, it is good to know how it gets processed along the way.
+
+Typically the query string in a Gemini request URL contains text entered by the user in their client as a response to a 1x status.
+
+Like with anything facing the public internet, the contents of incoming requests should be first sanitized. There are a few Gemini-specific aspects to consider:
+
+* Detect and strip ANSI escape sequences possibly in the query string. ANSI escapes are sometimes used in Geminispace for color and other styling due to prevalence of terminal-based clients and terminal-oriented users, who may have a fondness for ANSI escapes. Gemini clients generally are not expected to support ANSI escapes, so they should be removed from the input received by the application.
+
+* Unicode characters are sometimes misused for styling purposes. For example, the mathematical Latin letters in italic and bold may be used in place of regular Latin letters to achieve rudimentary styling. This is generally a bad idea because it interferes with non-visual presentation of the content (e.g., screen readers) and may interfere with the fonts of the client, hindering legibility. It may be sensible for your application to filter out these letters and replace them with the regular Latin equivalents.
+
+## 3.2 Size limitations
+
+A Gemini request URI must be a percent-encoded text string up to 1024 bytes in length. After decoding, the result is a UTF-8 text string. This means that the maximum number of characters that can be submitted via the request URI depends on how many bytes it takes to encode the characters. If you look at UTF-8 encoded text as bytes, ASCII characters (i.e., the Latin alphabet) take up one byte while many other characters take two, three, or even more bytes. Due to percent-coding, a two-byte UTF-8 character actually takes up six bytes, because both bytes are percent-coded as `%NN`. Consequently, your application cannot specify a maximum input length measured in characters. It is up to the client to help the user keep under the maximum limit of 1024 bytes when entering a query string.
+
+The application URL is counted as part of the 1024 bytes, so it may be a good idea to make the URL as short as possible when querying the user for input.
+
+A few ways to deal with the URL length limitation of 1024 bytes:
+
+* Compose longer content in pieces, one chunk at a time. This requires a way to link the requests together, for example with a TLS client certificate (session or user account).
+* Link to an external location that the server can download content from (i.e., indirect uploads).
+* Use supplementary protocols like Titan, email, or SFTP. These should not be assumed to be universally supported, though.
+
+## 3.3 Editing content
+
+Once a user has submitted content to your application, they may need to later modify it. Gemini's limitations present some challenges here, but advanced clients have features that help here.
+
+There is no way to prefill the client's input prompt, so a previously submitted query string cannot be returned to the client for editing. At best, the human-readable prompt text may be used here, but clients do not necessarily allow copying or otherwise interacting with it. It is up to the client to keep copies of previously entered input.
+
+Copying content from a page and pasting it into an input prompt is a viable method for editing, if the client supports copying the original visually-unformatted Gemtext source. This can be a problem in terminal-based clients, where copying is done in the visual text buffer of the terminal emulator instead of the page source. One can introduce hard line wraps in the copied text, for instance. Your application should be careful when presenting user-submitted content so there is no additional notations or links, allowing copying and pasting it without changing it.
+
+Pages in client-side cached history may be available for restoring earlier versions of edited content. For example, after making an accidental edit, you can navigate back to copy the previous version, then edit again, pasting the old version.
+
+The Lagrange client has a feature called "Paste Preceding Line" in the input prompt that allows pasting the Gemtext source line immediately preceding the link line that opened the prompt. You may want to consider placing "Edit" actions immediately below such editable content lines. However, always ensure your app works in any Gemini client — a core strength of Gemini is the software diversity, so interoperability must always be front of mind.
+
+# 4. Sessions and users
+
+A central design decision is whether your application needs to have per-session or per-user data, and how these will be stored and maintained.
+
+While many applications, such as search engines, weather services, and simple games, can function without any knowledge about the user, more sophisticated applications typically have some per-user state that needs to be tracked in a private and secure manner. For example, the application could have per-user preferences, a player inventory, or an internal messaging system, and this data needs to be stored persistently on the server.
+
+## 4.1 Client certificates
+
+You should already be familiar with how and why Gemini uses TLS:
+
+=> gemini://geminiprotocol.net/docs/tls-tutorial.gmi  A gentle, Gemini-centric guide to TLS certificates
+
+The URI syntax specification (RFC 3986) defines that there can be a user name and password included in the authority component of a URI. However, these should not used in Gemini. Instead, TLS client certificates are what enable Gemini applications to keep track of individual sessions and user accounts in a secure and privacy-respecting manner. In fact, traditional passwords should be avoided in Gemini applications so that the certificate-based identity/session management can be used to its fullest extent.
+
+It is possible to create stateful applications without relying on client certificates, and that can be a viable option for simple applications like casual games. However, client certificates are recommended for most applications because they are more secure, flexible, generally supported by Gemini clients, and easier to deal with in your application logic.
+
+Therefore, it is good to understand some details about TLS and client certificates to the extent that they impact application design and implementation. However, the following is not an in-depth technical review of X.509 certificates, but rather just an outline to give you the suitable mental model for dealing with certificates in your Gemini application.
+
+### X.509
+
+The X.509 standard defines the format of public key certificates used in various internet protocols, including TLS.
+
+Client certificates are a part of TLS. They are sometimes used on the web as well, and for things like securing connections to enterprise email servers. However, web browsers do not typically use them for identifying individual users like is done on Gemini.
+
+Client certificates, just like server certificates, contain public keys (along with other information such as an expiration date). Each public key is part of an asymmetric key pair, with a corresponding private key which is never sent over the network. However, as part of the TLS handshake, both server and client send each other extra information computed using their private key (such as a digital signature) which the other party can use to verify that whoever has sent the certificate is also in posession of its matching private key — a stolen certificate by itself, without the key, cannot be used to succesfully complete a TLS handshake, and unlike typical user-generated passwords, private keys cannot be practically brute-forced. The upshot of all this for our purposes is that when a Gemini application receives multiple successful TLS connections using the same client certificate, it can be cryptographically certain that those connections are all coming from the same source. The client certificate thus securely groups multiple independent Gemini requests into a single logical entity which we can think of as a "user session", without the need to include any extra information at the level of the Gemini protocol itself.
+
+=> https://en.wikipedia.org/wiki/X.509 See also: X.509 in Wikipedia
+
+### Aspects unique to Gemini
+
+X.509 certificates have a fixed time window for validity, i.e., they will expire after a date that was chosen at creation time. This means the user has to decide the appropriate date when they create the certificate. You are responsible for communicating to the user information for deciding this. Some clients will default to a very long expiration time, even millennia in the future, to avoid issues with accidental expiration. Changing the expiration date of an existing certificate is not possible — any changes to the certificate information will invalidate its signature, making the certificate unusable.
+
+Gemini client certificates are generated by the user themselves acting as the Certificate Authority (CA). In other words, they are self-signed, with no trusted third parties vouching for the contained information. Your application should therefore not place a high level of trust on anything in the certificate, except for the encryption key pair that naturally would not function properly if it was invalid.
+
+A client certificate often represents a particular user identity. However, this is not mandatory. Certificates can be created for per-session or temporary uses as well, and clients do not have to treat them as permanently stored data, in case anonymous or non-persistent identification is appropriate. Thanks to cryptography, other parties are unable to forge or reuse such temporary certificates later on.
+
+Your application is allowed to access the Issuer and Subject common names stored in the client certificate. These are typically used for identifying the CA and the certificate owner, but as these are self-signed certificates, the user can put anything in there and your application is free to read the text fields as an additional form of input.
+
+What data exactly is available to your application code depends on the Gemini server you are using and how it provides this information to you. Some servers only provide a fingerprint (hash sum) of the client certificate via CGI environment variables while others may give access to the full X.509 object via a TLS API. Check the server's documentation for more information. As a general rule of thumb, even if you have access to them, you should avoid storing full X.509 certificates persistently (e.g., in a database or as files) and instead only store the fingerprints, for improved security and privacy.
+
+Due to Gemini's URL-prefix based client certificate activation, you must structure your application in a way that enables the client to activate a certificate for the appropriate parts of the application. Usually, one certificate applies to the entire application, so it should be visible under a single root directory in URLs.
+
+### Generating client certificates
+
+You may need to generate multiple client certificates when developing and testing your application. Some Gemini clients allow you to generate new client certificates as needed, however certificates created with any X.509 software can also be used. The `gemcert` utility by Solderpunk and the OpenSSL command line tools are good choices for generating certificates, the former being specifically written for Gemini and the latter being widely available.
+
+=> https://git.sr.ht/~solderpunk/gemcert gemcert: A simple tool for creating self-signed certs for use in Geminispace
+
+## 4.2 User accounts
+
+Implementing user accounts in a Gemini application is straightforward thanks to TLS client certificates. They enable identifying the user in a secure and unambiguous manner.
+
+There are two ways you can approach user account creation. Accounts can be created automatically when an unrecognized client certificate is detected, or they can be created through a deliberate series of actions that the user needs to take. The former is very convenient and simple for both the application and the user. This is well-suited for games, for example. The second approach is suitable for complex applications where user accounts play a more significant role.
+
+* Implicitly created accounts: Each client certificate corresponds to one user account. Information included in the certificate, like email address and user ID, can be used to initialize the account metadata.
+
+* Manually created accounts: User accounts are independent entities and one can associate multiple certificates with each account. This is more flexible but the implementation is more complicated.
+
+### Certificate activation
+
+Client certificates are activated for a given URL prefix. This means that you should always direct the user to activate their certificate at the root path of your application. This will ensure that while the user is navigating inside the application, all requests will include the activated certificate as expected. You should avoid activating a client certificate needlessly for the entire domain where your application is running. This would mean requests unrelated to your application also include the client certificate, potentially leaking information contained in the certificate. This is less of a concern if you own and control the entire domain but may be a sigificant risk on multi-user and multi-application servers.
+
+The response status codes 60, 61, and 62 are used for informing the client about the need for a client certificate and when there is an issue with the active certificate. The basic flow is as follows:
+
+1. The client requests a URL at the root of the application.
+2. The server responds with 60 to indicate that a client certificate is needed.
+3. The user activates a certificate and requests the URL again.
+4. The server handles the request using the associated user account and responds normally.
+
+If your application can only be accessed when a client certificate is active, you can simply respond with status 60 whenever a certificate is not provided. Otherwise, the application needs to have separate modes for logged-in and logged-out (anonymous) usage. In the latter case, your application's UI should have a login link that initiates the certificate activation flow. For example:
+```
+=> /my-app/?register Register Account
+```
+A link like this can be placed anywhere inside or outside your application, and it has the advantage of ensuring that the client is requesting the application's root URL "/my-app/". The query string is useful here because it notifies the application about the user's intent but still allows requesting the root path itself and not a sub-page. Consider the following:
+```
+=> /my-app/register Register Account
+```
+This would cause the client to request the path "/my-app/register", so it might activate the chosen certificate only for the "register" page and not the entire "/my-app/" as was perhaps expected. You would then have to worry about redirecting the user away from the "register" page back to the appropriate page inside the application. Using a query string is preferred for these reasons.
+
+It is also possible that the client tries to access a URL inside the application directly. In this case, it is recommended to first redirect the user to the root of the application so the client certificate can be activated using the correct prefix.
+
+1. The client requests a URL inside the application.
+2. The server responds with 30 and the application root URL.
+3. The client requests the application root URL.
+4. The server responds with 60 and the rest of the steps above are followed.
+
+Optionally, in step 2, the originally requested path could be included as a query string in the redirect, so the server can then redirect the client back to that path after step 4, when the appropriate client certificate has been activated by the user. Whether this is feasible depends on how your application handles query strings in the root path; a special prefix or query parameter may be needed when implementing this.
+
+Note that a user is allowed to activate a client certificate on any URL, not just as a reaction to status 60. This means your application should be prepared to handle an unrecognized client certificate at any URL inside the application. A good way to handle this is to redirect such requests to the "/my-app/?register" URL to initiate the normal certificate activation flow. Alternatively, the application can respond with status 61 and provide a human-readable error message about the unregistered certificate.
+
+### About certificate fields
+
+X.509 certificates have Issuer and Subject fields that contain information (text) about who issued the certificate and what the certificate is about. If the certificate is self-signed, like in Gemini, these fields can be used for storing text for basically any purpose. The advantage of these fields is that the contents are standardized and may include useful details like a user name, user ID, email address, country, organization, or a domain name. Parsing these in your application is straightforward.
+
+However, you should note the following:
+
+* A Gemini client is not required to provide means for client certificate creation and neither is it required to allow entering any information into the issuer/subject fields. Therefore, your application should treat these as optional conveniences.
+
+* The information in the certificate fields may be transmitted as clear text, visible to anyone observing packets on the network. (Prefer to always use TLS 1.3 where all certificates are transmitted in encrypted form.)
+
+If you decide to rely on information in these fields, make sure the user is aware of this prior to creating the client certificate. The content of the fields can only be set during creation and cannot be changed without generating an entirely new certificate.
+
+### Fingerprints
+
+A common way for an application to handle client certificates internally is to generate fingerprints based on them, and only use the fingerprint instead of the entire X.509 certificate (or chain of certificates). Storing a fingerprint is more secure than storing the entire certificate, because this is a one-way mapping: it is virtually impossible to derive the original certificate from a fingerprint. These fingerprints are also cryptographically guaranteed to uniquely represent a certificate, because the likelihood of two valid certificates having the same fingerprint is infinitesimally small, and the underlying TLS machinery ensures that the certificate itself is valid.
+
+In practice, TLS libraries usually provide APIs for generating, say, a SHA-256 hash sum from the serialized binary (DER) form of the certificate.
+
+Depending on your TLS library, you may have the option to generate a fingerprint from the entire certificate or just its public key. It may be useful to store both kinds of fingerprints. A user is allowed to generate new certificates based on an existing key pair, thus enabling your application to detect when an old and a new certificate are related to each other, since they are using the same key pair. However, you should generally avoid this due to increased security risks. If the private key leaks, anyone who has access to the key can create new certificates with it, potentially gaining access to the user account in your application. At a minimum, always respect the expiration date in the originally registered certificate, and delete any associated public key fingerprints when a certificate is removed from the application.
+
+### Lost and expired certificates
+
+Client certificates are just bits of digital information so they can be lost or destroyed accidentally. Not everyone is careful enough to keep appropriate backups. The user may also underestimate how long they need a particular certificate and it may expire, leaving them locked out of their account. Therefore, it is important for your application to help users recover access to their account in these cases.
+
+As a preventative measure, your application should instruct the user about what is a reasonable expiration time for a client certificate. This may be depend on what your application does. There is a security/convenience trade-off here: a short expiration time (e.g., a few months) reduces potential damage if the certificate is compromised, but the user is forced to renew it continually.
+
+It is good to allow users to add additional certificates to their account so that any one of them can be used to access it. This protects against one of the certificates being lost, and also lets the user access the account using certificates created on different devices and at different times.
+
+One way to implement this is letting the user set a password that enables them to log in to their account as an alternative to supplying the correct client certificate. However, such passwords should be treated with care. The certificate-based account management that Gemini enables is powerful and convenient, and one should not undermine its advantages by assuming traditional passwords are going to be used as well. It is recommended to always primarily rely on client certificates and only use passwords in exceptional situations. It is a good idea to have these passwords automatically expire after a short period of time (hours or days), so that the user does not have to worry about remembering or saving them long-term. Randomly generated single-use passwords are also a sensible option.
+
+For example, let us say the user has already registered certificate A into their account, but they also want to add certificate B that was created on a different device. Your application can handle this as part of the regular account creation flow.
+
+1. User deactivates certificate A and requests the application's root URL "/my-app/".
+2. Application responds with status 60.
+3. User activates certificate B and requests the root URL again.
+4. Application generates a page showing options for account creation and alternative certificate addition.
+```
+=> /my-app/?new-account Create new account
+=> /my-app/?alt-cert    Add alternative certificate
+```
+5. User opens the link "Add alternatve certificate".
+6. Application responds with status 10, asking for the account name.
+7. User submits the account name.
+8. Application responds with status 11, asking for the password.
+9. User submits the account password.
+10. If the name and password match, certificate B gets linked to the account and the application redirects the user to the "/my-app/" root URL.
+
+The following example shows a modified flow where a randomly generated temporary password is used.
+
+1. User has certificate A activate and opens the link "/my-app/?alt-cert".
+2. Application generates a temporary password for the account and responds with status 20:
+```
+Switch to your new certificate now and provide the password:
+XXXXX-YYYYY-ZZZZZ
+The password expires in 5 minutes.
+=> /my-app/?alt-cert Continue
+```
+3. User activates certificate B and either requests "/my-app/?alt-cert" again or clicks the link on the response page above.
+4. Application recognizes the unfamiliar certificate and responds with status 11, asking for the temporary password.
+5. User supplies the password.
+6. If the password has not expired, the application adds certificate B to the associated account. The password is deleted. Otherwise, the application responds with an error status.
+
+### Recovering access to an account
+
+One can always handle users' account recovery requests manually, but to make your life easier, it is sensible to have some way for users to recover accounts on their own in a secure manner.
+
+One way to handle automated account recovery is to rely on a user-specific recovery URL. The user is permitted to configure a URL where your application can request the user's client certificate as a file. This requires the user to have a server where they can serve files, for example a Gemini capsule of their own. In the following example, the user has lost all certificates that they used to access the application, but they did configure a recovery URL on the account.
+
+1. User generates a new certificate C, activates it, and selects the recovery action "/my-app/?recover".
+2. Application responds with status 10 asking for the account name.
+3. User supplies the account name.
+4. Application checks if there a recovery URL on the account, and if so, requests the contents of the URL. If it is a valid X.509 client certificate and its fingerprint matches the fingerprint of the active certificate C, the certificate gets added to the account. The application then responds with a redirect to the application root URL. Otherwise, if any of these steps fail, the application responds with an error status.
+
+At no point should the application display the recovery URL to the client, because until a matching certificate is found, the user's identity is unknown. If a third party learns what the recovery URL is, they may be able to generate a certificate of their own and serve it to the application during the recovery process.
+
+The downside of this method is that if the server where the recovery URL points to is compromised, the application user account may also be compromised. To mitigate this risk, the recovery URL should be difficult to guess and should not normally point to any actual file on any server. This way the attacker who gains access to the capsule has no way of knowing where the recovery certificate is located. A further downside is that the user may forget what their recovery URL is, and naturally they can't check the URL since they've lost access to the account. Saving the recovery URL to a password manager or making it systematic (and more easily guessable by the owner) in some way may help.
+
+If your application supports user email addresses and is able to send out email messages, account recovery could be automated via email as well. The application provides a publicly accessible action using which the user can submit their username, to initiate the recovery process. The application then generates a random token associated with the account and sends an email to the user's address with a Gemini URL that includes the generated token. If someone then requests that URL within a set time period (say, five minutes), the application sends a 60 response and the received certificate gets linked with the account. The token should then be deleted immediately to avoid accidental or malicious use — remember that email is sent unencrypted and the URL may be seen by other parties as well.
+
+### Verifying user identity
+
+Given that Gemini client certificates are self-signed, is it possible to verify whether a particular user is who they say they are? Generally speaking, no. The only piece of information that is verified (by TLS) is the validity of the client certificate key pair. Private keys are secret, so only the entity who possesses the private key can successfully use the associated certificate for sending requests.
+
+Your application should never blindly trust that any information provided by the user is true and valid. However, there are some techniques to provide additional proof of identity:
+
+* Backlinks from the user's Gemini capsule: your application links to the user's capsule, and the user has separately added a link back to their user page (or equivalent) inside the application. (Very much like Mastodon's verified links in a user profile.)
+
+* The contents of the certicate recovery URL can be checked and compared against the client certificate in use.
+
+* The user can sign pieces of information with PGP, thus enabling independent verification of their authenticity.
+
+## 4.3 Anonymous usage
+
+Anonymous usage means that the Gemini server and your application have no way of identifying the user who sent a particular request, apart from the ever-present but ambiguous IP address.
+
+You should consider whether fully anonymous usage of your application is possible. This way, users are not required to go through the extra step of creating and/or activating a client certificate before they can access your application, making it more convenient to use. Some users may also not be comfortable with the idea that each action they take is possibly being recorded and associated with an identity — consider a search engine, for example. Even if anonymous usage is impractical or undesirable, your application may still have some parts that can be accessed anonymously. For example, anonymous visitors could see a Top 10 scoreboard or a feed of public posts. As a general guideline, you should design your application to have both public/anonymous and private/authenticated parts, as applicable.
+
+Most non-trivial Gemini applications should not rely on fully anonymous access but instead use TLS client certificates for keeping track of users and sessions, because that is the most secure and privacy-respecting solution that the protocol offers.
+
+Putting that aside for a moment, let us consider what anonymous usage means for a Gemini app. Gemini has no cookies so the only way to store per-session data is to encode it somehow inside URLs. This is because the server has no way of associating server-side data with a particular session: all per-session information must be contained in the response sent to the client, and must then be returned back in subsequent requests made by the client. A trivial example of this is a search engine where the URL query string contains the search terms provided by the user, and page navigation links on the result page have the same query string so that the search terms are preserved when changing the page. In addition to query strings, link URLs may contain information in other ways. For instance, the URL path may include parts that do not map to any actual location in a file system. (See the CGI "PATH_INFO" variable.)
+
+A really simple application like a Tic Tac Toe game could get away with not keeping any server-side data, instead storing all state inside URLs. However, Gemini URLs have a maximum length of 1024 bytes, so you only have so much space for your state and parameters. Also, the user may also change the state manually by editing the URL. Obfuscation via a simple cipher like ROT13 or Base64 might be warranted, but these are not foolproof methods.
+
+A further important point to note is that URLs that contain with session state must be guaranteed to be unique, or they must fully contain the entire application state. Otherwise, sessions of two users could be accidentally mixed up, as requests come in at random times from various users around the world. In practice, randomized tokens can be used for ensuring session-specific URLs remain unique. For example, to start a new game session, the following link could be used:
+```
+=> /start-game/{TOKEN}  Start a New Game
+```
+Here, {TOKEN} would be a random string of characters that changes on every load of the page and is guaranteed to be different than the tokens of previously started sessions, say, over the last 12 months, at which point sessions could be considered to be expired. Depending on how many times this link is loaded by clients, you may need to store a sizable database of used tokens and ongoing sessions. While a session is ongoing, the token would be part of every URL on the pages sent to the client:
+```
+=> /{TOKEN}/move      Move Player
+=> /{TOKEN}/end-turn  End Turn
+```
+Or, simplified using relative paths, if the current page's URL (gemini://example.com/myapp/{TOKEN}/) already contains the token:
+```
+=> move      Move Player
+​​=> end-turn  End Turn
+```
+This way, the token and any other data encoded in the URLs survive the roundtrips between the client and server. We recommend generating lengthy random tokens as session identifiers to prevent guessing or brute-forcing them. For example, simple sequential numbering of sessions would be a very bad idea.
+
+You may also take advantage of the URL query string for user requests. For example, you could do this:
+```
+=> /{TOKEN}?move      Move Player
+=> /{TOKEN}?end-turn  End Turn
+```
+This may simplify processing the requests in your application code because the URL parser can extract the query string for you and you don't manually have to split the path into different parts. However, note that storing the session token in the query string is inadvisable, because this makes it impossible to query the user for input via status 1x: the server has no way to pre-filling the input prompt that a client displays to the user, which would be required for specifing the correct session token.
+
+You may be tempted to incorporate the client's IP address somehow in the generated token. This could work if your application only runs on your local network and only receives requests from IP addresses that you fully own and control. However, on the public internet this has several drawbacks:
+
+* IP addresses may not be unique per user. For example, multiple people behind one NAT router will be using the same IP address.
+* Bookmarking such a URL and opening it on another device may cause problems because the IP address may change.
+* Residential and cellular IP addresses are dynamic so a user may find their tokens suddenly become obsolete.
+
+A notable potential downside of anonymous usage is that search engine crawlers and other bots can freely access your application and may request each of the URLs on your pages. We recommend setting up robots.txt to limit access to any parts of your application where URLs are used for tracking sessions or performing actions. But even so, bots may not respect your rules and you may find it necessary to implement additional manual restrictions, ad-hoc bot detection heuristics (for example, requests coming in too frequently per IP address), or clean up your database manually after each onslaught.
+
+=> gemini://geminiprotocol.net/docs/companion/robots.gmi  robots.txt for Gemini
+
+# 5. Security considerations
+
+Geminispace is a calm and quiet place compared to the web. However, this does not mean you can neglect basic security features when implementing your application. Your application may be suddenly hammered by a well-meaning search engine crawler, or worse, a malfunctioning one. You may also encounter the occasional prankster, spammer, or troll who will use your application maliciously. People may feel emboldened by the simplicity of the protocol and the Gemtext syntax, which make it quite easy to perform scripted attacks.
+
+A sufficently sophisticated bot is indisguishable from a human using a regular Gemini client. A dedicated attacker will therefore be able to cause your application harm no matter what precautions you take. In practice, you can prevent the more trivial attacks by making your application function in a less predicable way. The following sections detail some techniques for achieving this.
+
+Depending on your application, you may also want to consider non-technical solutions like handling user registration entirely via email — or augmenting registration with a non-Gemini second factor — thereby eliminating a potential attack vector.
+
+## 5.1 Access tokens
+
+Cross-site request forgeries (CSRF) are an important class of attacks for Gemini applications. Because client certificates are activated for a particular URL prefix, with no distinction made where that URL is encountered, an attacker could set up a link to another site where you have activated a client certificate, with a URL chosen by the attacker hidden behind an innocuous or misleading human-readable label. As a result, you could get tricked into performing unwanted actions with potentially harmful effects.
+
+The technique for hindering CSRF attacks is to generate some or all of your application's action URLs dynamically so that they contain information that is difficult for a third party to determine. For example:
+```
+=> /my-app/account/delete/D3F83AC2 Delete Account
+```
+Here "D3F83AC2" is an access token that your application has generated. Depending on your application, you have some options for generating these:
+
+* Use a hash of the user's client certificate. Certificate hashes can be considered private information because only servers that you have authorized will receive your client certificate and are able to compute the correct hash. In effect, this binds your application's actions to a particular user. An attacker would first have to gain access to your client certificate before they can make a malicious link, and it would only work for you specifically.
+
+* Use a randomly generated value. Some actions may not be linked to any client certificate, for example if your application supports fully anonymous access, so there is no unique hash to compute. In this case your application can generate random values, periodically updating them with new ones, and check if the requested actions have any valid token value. As a downside, links with tokens will eventually expire, depending on how many old values you are comfortable with keeping stored.
+
+You can combine these methods to generate even more secure tokens that an attacker is unable to guess even if they learn the hash of your client certificate, or if they periodically scrape your application to figure out the currently valid random tokens (assuming the random tokens they are used on publicly accessible pages; random tokens on pages protected by your client certificate are naturally not visible to any attacker).
+
+Use your discretion when choosing which actions should be protected with access tokens. Dynamically generating all action links may be cumbersome to implement, and not all actions need to be protected. It is a good idea to include a token in all destructive or difficult-to-undo actions, and also actions that spammers might use to insert unwanted content into your application.
+
+### Confirmation queries
+
+When it comes to destructive actions, a common pattern is to ask the user for confirmation via status 10 before executing the action. For example, the user could be asked to enter a particular string ("YES") if they really mean to perform the action.
+
+However, any link on a page could already come with the "?YES" query string included. Therefore, it is good to combine confirmation prompts with the access tokens mentioned in the previous section. Another way to deal with this is to make the prompts dynamic ("What is the third number in this sequence? 34 Hello 11 8"), although that may be more difficult to implement and more annoying for the user to deal with.
+
+## 5.2 Rate limits
+
+A spammer or prankster could write a simple script to issue a large number of Gemini requests using one or more accounts they've created in your application. Such scripts can be foiled by URLs that contain unique or random elements. However, more sophisticated scripts could parse the returned pages and extract URLs with access tokens, emulating a legitimate client. Therefore, rate limiting is a necessary defense against automated attacks.
+
+A malicious user could create 10000 unique accounts using a script in a short period of time. Consider appropriate site-wide or per-user rate limits on certain actions that modify application state, at least to create or delete accounts/objects/items, taking into account that Geminispace is relatively quiet so the limits do not have to be very high.
+
+Check if your Gemini server provides rate limiting suitable for your application. However, when it comes to the server, it most likely has been implemented with the goal of remaining responsive under heavy load to serve as many requests as possible, instead of trying to prevent malice. You may find that implementing a more adaptive rate limit is necessary. For example, only certain actions in your application might warrant strict rate limiting while most pages can be served with the server's generic, more generous limits. For example, user registration and publishing content may be considered for more strict limits. Appropriate limits may also depend on the type of user account, with "trusted" users (e.g., administrators) having unlimited access.
+
+Rate limiting by definition requires you to keep a log of incoming requests. Any logging that you perform should be done in a privacy-sensitive manner: store hashes of client IP addresses instead of the actual plain addresses, for example. It is standard internet security practice to not store this kind of sensitive information plainly accessible in a database, in case a third party gains access to it. Recording the client certificate hash is preferable to the IP address, if the action is performed with a certificate activated.
+
+A very basic rate limiter would count the number of requests that have occurred inside a given time window (per action/user), and reject further requests if a predefined threshold has been reached. You should make any threshold values easily adjustable so they can be tuned to the current circumstances. If a more robust algorithm is needed, you should check out the leaky bucket algorithm:
+
+=> https://en.wikipedia.org/wiki/Leaky_bucket Leaky bucket (algorithm)
+
+## 5.3 Client certificates
+
+You should treat client certicates as sensitive information. If your application publishes information about them, for instance hash sums, it may allow other servers to check this information and match it against the client certificates they have access to, potentially discovering matches that reveal whether a user has reused a client certificate for multiple applications. While the risks of such tracking are small, Gemini users generally feel that privacy should be respected and this should not be allowed.
+
+## 5.4 Administration
+
+Your application should have adequate administrative features for cleaning up messes caused by malicious users. For example, you may need a way to quickly and easily delete thousands of accounts that were created in a scripted attack, without having to roll the database back to an earlier backup.
+
+## 5.5 Path handling
+
+If you find yourself implementing URL path handling, for example as part of processing PATH_INFO or in a custom-built Gemini server, note the common pitfalls in mapping the requested path to actual files: you should prevent access to hidden Unix files (whose name starts with a period) and reject extraneous ".." references that attempt to access out-of-bounds parent directories.
+
+# 6. Technical notes
+
+## 6.1 Alternatives to CGI
+
+While you can implement fully-fledged applications with CGI, it still assumes that input comes in via environment variables and output goes to stdout, with each request spawning a CGI process. This can be too performance-intensive for the server and inoptimal for your application, especially if the server is running on low-end hardware.
+
+Some Gemini servers support other interfaces like SCGI and FastCGI for handling requests more efficiently. A sensible approach could be to get started with basic CGI and move onto more efficient interfaces or a customized server when encountering performance or API limitations.
+
+### FastCGI
+
+=> https://en.wikipedia.org/wiki/FastCGI Wikipedia:
+> FastCGI is a binary protocol for interfacing interactive programs with a web server. It is a variation on the earlier Common Gateway Interface (CGI). FastCGI's main aim is to reduce the overhead related to interfacing between web server and CGI programs, allowing a server to handle more web page requests per unit of time.
+
+One Gemini server that supports FastCGI is gmid.
+
+=> gemini://gmid.omarpolo.com/ gmid
+
+### SCGI
+
+=> https://en.wikipedia.org/wiki/Simple_Common_Gateway_Interface Wikipedia:
+> SCGI is a protocol for applications to interface with HTTP servers, as an alternative to the CGI protocol. It is similar to FastCGI but is designed to be easier to parse. Unlike CGI, it permits a long-running service process to continue serving requests, thus avoiding delays in responding to requests due to setup overhead (such as connecting to a database).
+
+SCGI is supported at least by the Molly Brown and GLV-1.12556 servers.
+
+=> https://tildegit.org/solderpunk/molly-brown/src/branch/master/README.md Molly Brown's README
+=> https://github.com/spc476/GLV-1.12556 GLV-1.12556 (GitHub)
+
+For more information about using SCGI:
+
+=> gemini://gemini.bunburya.eu/gemlog/posts/2021-04-07-dynamic-content-scgi-gemini.gmi bunburya: Using SCGI to serve dynamic content over the Gemini protocol
+
+### Extensible and custom servers
+
+A bespoke server optimized for a single application is not too difficult to implement thanks to Gemini's simplicity. One could write such a server from scratch or existing software that supports extensions or provides a suitable low-level framework:
+
+=> https://github.com/spc476/GLV-1.12556  GLV-1.12556 (Lua)
+=> https://pypi.org/project/gmcapsule/    GmCapsule (Python)
+=> https://pypi.org/project/Jetforce/     JetForce (Python)
+
+Once you implement a custom server, you can also implement support for requests with custom URI schemes for additional flexibility, targeting specialized clients. However, that is outside the scope of this guide.
+
+## 6.2 Parallel processing
+
+Gemini applications typically have not encountered high levels of traffic and therefore the need to handle multiple requests in parallel is not a fundamental requirement. To keep things simple, you could simply handle a single request at a time. This sidesteps multiple issues with managing application state, such as making simultanous updates to its database. This makes it possible to rely on SQLite, for instance, simplifying the implementation. However, if the processing of a request takes a long time, or when multiple people do happen to use the application simultanously, it is good to consider how parallel processing is supported by the application.
+
+In practice, the implementation details are similar to web applications. Commonly applications rely on a full-fledged database server like PostgreSQL and build their internal processing around that. The database itself can then be used for keeping transactions correct and atomic as needed. ("ACID": atomicity, consistency, isolation, and durability.) Your Gemini server may impose some limitations on handling of parallel requests, though. For example, a Python-based server that handles requests using multiple threads can only transmit data in parallel while actually executing code in only one request at a time. (For more information, read about the Python Global Interpreter Lock (GIL).) Externally running CGI programs naturally can run in parallel regardless. Please refer to your server's documentation for more details.
+
+## 6.3 Mailto links
+
+The "mailto" URI scheme can be quite convenient for certain applications. You can use these in your application to enable the user to conveniently send an email to some destination address, optionally with a predefined subject and body as well. Some Gemini clients are able to open these links in an email client, much like a web browser would. For example:
+
+=> mailto:jaakko.keranen@iki.fi?subject=Lagrange%20commit%2092190836&body=%3D>%20gemini%3A//git.skyjake.fi%3A1965/lagrange/release/commits/92190836356c43238e29856629e47d80e82dd7e3 Send email about Lagrange commit 92190836
+
+The prefilled message subject and body could be used for temporary session tokens or other metadata as required by the application, or to associate the message with a particular user. However, email is usually transmitted as plain text, so the usual privacy concerns apply. It would be possible to incorporate PGP into these emails, but that would have to done manually by the user, so it becomes cumbersome from a user experience point of view. However, encrypted emails do have the benefit of verifying the identity of the sender without any session tickets or single-use tokens.
+
+## 6.4 Proxy applications
+
+Gemini proxy servers can respond to Gemini URLs located on hosts other than themself and they may handle non-Gemini URIs as well. When it comes to TLS, the client's connection is to the proxy server; the proxy server does its own, independent TLS requests to the destination hosts.
+
+An example of a proxy application is one that responds to HTTPS URLs and converts the corresponding web pages to Gemtext:
+
+=> gemini://gemi.dev/stargate.gmi  Public Stargate Proxy
+
+Other kinds of applications could be built as a proxy server. A Gemini server can respond to any given URL (scheme, hostname, etc.), opening the door to custom URI schemes and virtual path hierarchies. However, Gemini clients typically only recognize a handful of URI schemes, so in practice custom schemes may be useful mostly for special-purpose Gemini clients.
+
+A proxy server that fetches remote content could be built in a stateful manner, too, because it receives the client certificate if one is enabled for the requested URI. As explained in section 4, the certificate could be used as a session ticket for keeping track of the proxy application's state. However, the proxy cannot perform further requests with the client's certificate, limiting what is possible in practice. This area remains open for experimentation.

@@ -1,0 +1,61 @@
+# Best practices for Gemini implementations
+
+## Introduction
+
+This document describes various conventions and snippets of advice for implementing and using the Gemini protocol which, while not mandated by the protocol specification, are generally considered a good idea.  If you're writing Gemini software or building a Gemini site, you should generally follow the advice given here unless you have good reasons not to.
+
+## Filenames
+
+Gemini servers need to inform clients of the MIME type of the files they are serving.  The most convenient way for servers to figure out the MIME type of files is via the extension of the filename.  These mappings are mostly well-standardised (and unix systems often have an /etc/mime.types file full of them), but the question remains as to how servers should recognise files to be served with the text/gemini type defined by Gemini.
+
+Current Gemini servers seem to use .gmi or .gemini extensions for this purpose, and new servers are strongly encouraged to support one or both of these options instead of adding a new one to the mix.
+
+Following the convention for webservers, if a request is received for a path which maps to a directory in the server's filesystem and a file named index.gmi or index.gemini exists in that directory, it is served up for that path.
+
+## File size
+
+Gemini servers do not inform clients of the size of files they are serving, which can make it difficult to detect if a connection is closed prematurely due to a server fault.  The risk of this happening increases with file size.
+
+Gemini also has no support for compression of large files, or support for checksums to enable detection of file corruption, the risk of which also increases with file size.
+
+For all of these reasons, Gemini is not well suited to the transfer of "very large" files.  Exactly what counts as "very large" depends to some extent on the speed and reliability of the internet connections involved, and the patience of the users.  As a rule of thumb, files larger than 100MiB might be thought of as best served some other way.
+
+Of course, because Gemini supports linking to other online content via any protocol with a URL scheme, it's still possible to link from a Gemini document to a large file served via HTTPS, BitTorrent, IPFS or whatever else tickles your fancy.
+
+## Text encoding
+
+Gemini supports any text encoding you like via the "charset" parameter of text/* MIME types.  This allows serving "legacy" text content in obscure regional encoding schemes.
+
+For new content, please, please, please just use UTF-8.  The Gemini specification mandates that clients be able to handle UTF-8 text.  Support for any other encoding is up to the client and is not guaranteed.  Serving your content as UTF-8 maximises its accessibility and maximises the utility of simple clients which support only UTF-8.
+
+## Redirects
+
+### General remarks
+
+Redirects were included in Gemini primarily to permit the restructuring of sites or the migration of sites between servers without breaking existing links.  A large, interconnected space of documents without such a facility inevitably becomes "brittle".
+
+However, redirects are, generally speaking, nasty things.  They reduce the transparency of a protocol and make it harder for people to make informed choices about which links to follow, and they can leak information about people's online activity to third parties.  They are not as bad in Gemini as in HTTP (owing to the lack of cookies, referer headers, etc.), but they remain at best a necessary evil.
+
+As such, please refrain from using redirects frivolously!  Things like URL-shorteners are almost totally without merit.  In general, think long and hard about using redirects to do anything other than avoid link breakage.
+
+### Redirect limits
+
+Clients may prompt their users for decisions as to whether or not to follow a redirect, or they may follow redirects automatically.  If you write a client which follows redirects automatically, you should keep the following issues in mind.
+
+Misconfigured or malicious Gemini servers may serve redirects in such a way that a client which follows them blindly gets trapped in an infinite loop of redirects, or otherwise has to complete a very long chain of redirects.  Robust clients will need to be smart enough to detect these conditions and act accordingly.  The simplest implementation is to refuse to follow more than N consecutive redirects.  It is recommended that N be set no higher than 5.  This is inline with the original recommendation for HTTP (see RFC-2068).
+
+### Cross-protocol redirects
+
+Cross-protocol redirects (i.e. redirects from Gemini to something else, like Gopher) are possible within Gemini, but are very heavily discouraged.  However, misconfigured or malicious servers will always be able to serve such redirects, so well-written clients should be ready to detect them and respond accordingly.
+
+It is strongly recommended that even clients which generally follow redirects automatically alert the user and ask for explicit confirmation when served a redirect to a non-TLS-secured protocol like HTTP or Gopher, assuming the client implements support for these protocols.  This avoids unintentional plaintext transfers.
+
+### TLS Cipher suites
+
+TLS 1.2 is reluctantly permitted in Gemini despite TLS 1.3 being drastically simpler and removing many insecure cryptographic primitives.  This is because only OpenSSL seems to currently have good support for TLS 1.3 and so requiring TLS 1.3 or higher would discourage the use of libraries like LibreSSL or BearSSL, which otherwise have much to recommend them over OpenSSL.
+
+Client and server authors who choose to support TLS 1.2 should ideally only permit the use of ciphersuites which offer similar security to TLS 1.3.  In particular, such software should:
+
+* Use only Ephemeral Diffie-Hellman (DHE) Ephemeral Elliptic Curve Diffie-Hellman (ECDHE) for key agreement, in order to provide forward secrecy.
+* Use AES or ChaCha20 as bulk ciphers
+* Use SHA2 or SHA3 family hash functions for message authentication.

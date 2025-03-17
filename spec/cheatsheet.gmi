@@ -1,0 +1,62 @@
+# Gemtext cheatsheet
+
+This is a quick "cheatsheet" intended for people who haven't been writing Gemtext for long or who need their memory refreshed after a break.  If you're completely new to Gemtext and you need things explained in a more detail, you should check out the full length introduction:
+
+=> gemtext.gmi	A quick introduction to "gemtext" markup
+
+## Text
+
+Here's the basics of how text works in Gemtext:
+
+* Long lines get wrapped by the client to fit the screen
+* Short lines *don't* get joined together
+* Write paragraphs as single long lines
+* Blank lines are rendered verbatim
+
+## Links
+
+At the bare minimum, a link line consists of just the characters `=>` and a URL.  Here's a link to this page:
+
+```
+=> gemini://geminiprotocol.net/docs/cheatsheet.gmi
+```
+
+But you can include labels with links, and probably should most of the time.  Labels are separated from the URL by one or more spaces or tabs:
+
+```
+=> gemini://geminiprotocol.net/docs/cheatsheet.gmi	Gemtext cheatsheet
+```
+
+## Headings
+
+You get three levels of heading:
+
+```
+# Heading
+
+## Sub-heading
+
+### Sub-subheading
+```
+
+## Lists
+
+You get one kind of list and you can't nest them:
+
+```
+* Mercury
+* Gemini
+* Apollo
+```
+
+## Quotes
+
+Here's a quote from Maciej Cegłowski:
+
+```
+> I contend that text-based websites should not exceed in size the major works of Russian literature.
+```
+
+## Pre-fromatted text
+
+Lines which start with ``` will cause clients to toggle in and out of ordinary rendering mode and preformatted mode.  In preformatted mode, Gemtext syntax is ignored so links etc. will not be rendered, and text will appear in a monospace font.

@@ -1,0 +1,181 @@
+# Gemini hypertext format, aka "gemtext", specification
+
+Version 0.24.1
+
+This document is placed in the public domain under the following terms:
+
+=> https://creativecommons.org/publicdomain/zero/1.0/ Creative Commons CC0 1.0 Universal Public Domain Dedication
+
+# Abstract
+
+This document specifies the "gemtext" hypertext format.  Gemtext is intended to serve as the "native" response format of the Gemini file transfer protocol, in the same way that HTML is the native response format of HTTP [RFC7230], although it can be used for any other purpose for which it is suitable.  Gemtext is served via Gemini using the as-yet unregistered MIME type text/gemini.
+
+=> protocol-specification.gmi	See also the Gemini network protocol specification
+
+# Conventions used in this document
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in [BCP14].
+
+Gemtext is specified here in its so-called "canonical form" and, since text/gemini is a subtype of MIME type "text", line breaks are therefore represented by the sequence CRLF.  Note however that the Gemini network protocol specification allows any subtype of "text" to be transmitted with line breaks represented by LF alone.
+
+# Overview
+
+Gemtext is designed to support simple electronic documents which can link to other online resources and which can be displayed in a manner conducive to easy and pleasant reading on devices with diverse display shapes and sizes.  This provides an improved user experience over plain text which is "hard wrapped" to a fixed number of characters (which may be substantially more or less than can fit on a client's display), and where users must manually copy URLs out of the document and into their user agent's interface.
+
+The format is designed to be both as simple to write by hand and as simple to parse as practical.  The essential structure of a gemtext document is flat, not hierarchical, and a document can be parsed and rendered correctly in a single top-to-bottom pass.
+
+The format is explicitly NOT intended to facilitate precise and replicable control by document authors over how the document is displayed.  Styling is under the exclusive control of the rendering user agent.
+
+# Media type parameters
+
+As a subtype of the top-level media type "text", "text/gemini" inherits the "charset" parameter defined in [RFC2046].  However, the default value of "charset" is "UTF-8" for "text" content transferred via Gemini.
+
+A single additional parameter specific to the "text/gemini" subtype is defined: the "lang" parameter.  The value of "lang" denotes the natural language or language(s) in which the textual content of a "text/gemini" document is written.  The presence of the "lang" parameter is optional.  When the "lang" parameter is present, its interpretation is defined entirely by the client.  For example, clients which use text-to-speech technology to make Gemini content accessible to visually impaired users may use the value of "lang" to improve pronunciation of content.  When the "lang" parameter is not present, no default value should be assumed and clients which require some notion of a language in order to process the content (such as text-to-speech screen readers) should rely on user-input to determine how to proceed in the absence of a "lang" parameter.
+
+Valid values for the "lang" parameter are comma-separated lists of one or more language tags as defined in [BCP47].  Note that if multiple tags (and hence a comma) are used, the whole value MUST be enclosed in quotation marks (see [RFC2045], section 5.1 "Syntax of the Content-Type Header Field").  For example:
+
+* `text/gemini; lang=en' Denotes a text/gemini document written in English
+* `text/gemini; lang=fr' Denotes a text/gemini document written in French
+* `text/gemini; lang="en,fr"' Denotes a text/gemini document written in a mixture of English and French
+* `text/gemini; lang=de-CH' Denotes a text/gemini document written in Swiss German
+* `text/gemini; lang=sr-Cyrl' Denotes a text/gemini document written in Serbian using the Cyrillic script
+* `text/gemini; lang=zh-Hans-CN' Denotes a text/gemini document written in Chinese using the Simplified script as used in mainland China
+
+Parameters other than "charset" and "lang" are undefined and clients MUST ignore any such paramters.
+
+# Line oriented design
+
+Gemtext is a line-oriented format.  A document consists of one or more lines.  There are six distinct line types.  Each line belongs to exactly one type, and it is possible to unambiguously determine this type by inspecting the first three characters of the line.  A line's type, in conjunction with the parser state (see below) determines the manner in which it should be presented to the user.  Any details of presentation or rendering associated with a particular line type are strictly limited in scope to that individual line.  A gemtext document can be correctly parsed and rendered by handling each line in isolation as it is encountered in a single pass from the first to last line.
+
+The six line types are:
+
+* Text lines
+* Link lines
+* Heading lines
+* List items
+* Quote lines
+* Preformat toggle lines
+
+To be compliant with this specification, software which parses and displays gemtext documents MUST handle text lines, link lines and preformat toggle lines as described below.  These are considered the "core" line types.
+
+Software MAY additionally handle heading lines, list items and quote lines as described below to improve user experience.  Software which does not handle these lines as described MUST handle them as if they were text lines.
+
+# Parser state
+
+A compliant gemtext parser must maintain a single bit of internal state, corresponding to whether the parser is in "normal mode" or "pre-formatted mode".  The state of the parser controls how the type of a line is recognised and how a line is to be handled given its type.  The parser MUST be in "normal mode" at the beginning of parsing a document.  The parser is toggled between the two modes when it encounters a line type which serves this specific purpose.  The state of the parser at the end of a document has no meaning or consequences.
+
+# Recognising and handling gemtext lines
+
+## In normal mode
+
+### Text lines
+
+Text lines are the "default" line type, in the sense that all other line types are recognised by virtue of beginning with a specific identifying prefix.  Any line which does not begin with such a prefix is a text line.  In a typical gemtext document, the majority of the lines will be text lines.
+
+Text lines have no special semantics and should be presented to the user in a visually pleasing manner for general reading, the precise meaning of which is at the client's discretion.  For example, variable width fonts may be used, spacing may be normalised, with spaces between sentences being made wider than spacing between words, and other such typographical niceties may be applied.  Clients may permit users to customise the appearance of text lines by altering the font, font size, text and background colour, etc.  Authors should not expect to exercise any control over the precise rendering of their text lines, only of their actual textual content.
+
+Text lines which are longer than can fit on a client's display device SHOULD be "wrapped" to fit, i.e. long lines should be split (ideally at whitespace or at hyphens) into multiple consecutive lines of a device-appropriate width.  This wrapping is applied to each line of text independently.  However, multiple consecutive text lines which are each shorter than the client's display device MUST NOT be combined into fewer, longer lines.  Each individual lines in a Gemtext document is a stand-alone entity.
+
+Empty lines, i.e. lines consisting exclusively of CRLF, are valid instances of text lines and have no special meaning.  They should be rendered individually as vertical blank space each time they occur.  Multiple consecutive empty lines should NOT be collapsed into fewer empty lines and should be rendered as a quantity of vertical blank space proportional to the number of lines.
+
+### Link lines
+
+All lines beginning with the two characters "=>" are link lines.  Link lines allow Gemtext documents to link to other online resources, including other Gemtext documents.  Link lines have the following syntax:
+
+```
+=>[<whitespace>]<URL>[<whitespace><USER-FRIENDLY LINK NAME>]
+```
+
+where:
+
+* <whitespace> is any non-zero number of consecutive spaces or tabs
+* Square brackets indicate that the enclosed content is optional.
+* <URL> is a URL, which may be absolute or relative.
+
+All the following examples are valid link lines:
+
+```
+=> gemini://example.org/
+=> gemini://example.org/ An example link
+=> gemini://example.org/foo	Another example link at the same host
+=> foo/bar/baz.txt	A relative link
+=> 	gopher://example.org:70/1 A gopher link
+```
+
+URLs in link lines MUST have reserved characters and spaces percent-encoded as per RFC 3986.
+
+Clients can present links to users in whatever fashion the client author wishes, however clients MUST NOT automatically make any network connections as part of displaying links.
+
+### Preformatting toggle lines
+
+Any line whose first three characters are "```" (i.e.  three consecutive back ticks with no leading whitespace) are preformatted toggle lines.  These lines should NOT be included in the rendered output shown to the user.  Instead, they switch the parser out of "normal mode" and into "pre-formatted" mode.
+
+Any text following the leading "```" of a preformat toggle line MAY be interpreted by the client as "alt text" pertaining to the preformatted text lines which follow the toggle line.  Use of alt text is at the client's discretion, and simple clients may ignore it.  Alt text is recommended for ASCII art or similar non-textual content which, for example, cannot be meaningfully understood when rendered through a screen reader or usefully indexed by a search engine.  Alt text may also be used for computer source code to identify the programming language which advanced clients may use for syntax highlighting.
+
+### Heading lines
+
+Lines beginning with "#" are heading lines.  Heading lines consist of one, two or three consecutive "#" characters, followed by optional whitespace, followed by heading text.  The number of # characters indicates the "level" of heading;  # lines are headings, ## lines are sub-headings and ### lines are sub-sub headings.
+
+The text of a heading text should be presented to the user, and clients MAY use special formatting, e.g. a larger and/or heavier font or a different colour to indicate its status as a header.  However, the primary purpose of heading lines is not stylistic but semantic, specifically to provide a machine-readable representation of the internal structure of the document.  Advanced clients may use this information to, e.g. display an automatically generated and hierarchically formatted "table of contents" for a long document in a side-pane, allowing users to easily jump to specific sections without excessive scrolling.  Tools which automatically generate a listing of all gemtext documents in a directory or which create Atom/RSS feeds for a directory of gemtext documents can use first heading in the file as a human-friendly title.
+
+### List items
+
+Lines beginning with "* " are list items.  This line type exists purely for stylistic reasons.  The * may be replaced in advanced clients by a bullet symbol.  Any text after the "* " should be presented to the user as if it were a text line, i.e.  wrapped to fit the viewport and formatted "nicely".  Advanced clients can take the space of the bullet symbol into account when wrapping long list items to ensure that all lines of text corresponding to the item are offset an equal distance from the edge of the screen.
+
+### Quote lines
+
+Lines beginning with ">" are quote lines.  This line type exists so that advanced clients may use distinct styling to convey to readers the important semantic information that certain text is being quoted from an external source.  For example, when wrapping long lines to the the viewport, each resultant line may have a ">" symbol placed at the front.
+
+## In pre-formatted mode
+
+### Text lines
+
+Any line which does not begin with the three characters "```" is a text line.  In pre-formatted mode, text lines should be presented to the user in a "neutral", monowidth font without any alteration to whitespace or stylistic enhancements.  Graphical clients should use scrolling mechanisms to present preformatted text lines which are longer than the client viewport, in preference to wrapping them.  In displaying preformatted text lines, clients should keep in mind applications like ASCII art and computer source code: in particular, source code in languages with significant whitespace (e.g.  Python) should be able to be copied and pasted from the client into a file and interpreted/compiled without any problems arising from the client's manner of displaying them.
+
+### Preformatting toggle lines
+
+Any line whose first three characters are "```" (i.e.  three consecutive back ticks with no leading whitespace) are preformatted toggle lines.  These lines should NOT be included in the rendered output shown to the user.  Instead, they switch the parser out of "pre-formatted mode" and into "normal mode".
+
+Any text following the leading "```" of a preformat toggle line MUST be ignored by clients.
+
+# Formal grammar
+
+The following is an augmented BNF specification for a UTF-8 encoded gemtext document.
+
+```
+	gemtext-document = 1*gemtext-line
+	gemtext-line     = text-line / link-line / preformat-toggle
+	gemtext-line     =/ heading / list-item / quote-line
+	link-line        = "=>" *WSP URI-reference [1*WSP 1*(SP / VCHAR)] *WSP CRLF
+	heading          = ( "#" / "##" / "###" ) text-line
+	list-item        = "*" SP text-line
+	quote-line       = ">" text-line
+	preformat-toggle = "```" text-line
+	text-line        = *(WSP / VCHAR) CRLF
+
+        VCHAR    =/ UTF8-2v / UTF8-3 / UTF8-4
+        UTF8-2v  = %xC2 %xA0-BF UTF8-tail ; no C1 control set
+                 / %xC3-DF UTF8-tail
+
+	; URI-reference from [STD66]
+	;
+	; CRLF          from [STD68]
+	; SP            from [STD68]
+	; WSP           from [STD68]
+	; VCHAR         from [STD68]
+```
+
+# Normative References
+
+* [BCP14] Key words for use in RFCs to Indicate Requirement Levels
+* [BCP47] Tags for Identifying Languages
+* [RFC2045] Multipurpose Internet Mail Extensions (MIME) Part One: Format of Internet Message Bodies
+* [RFC2046] Multipurpose Internet Mail Extensions (MIME) Part Two: Media Types
+* [STD63] UTF-8, a transformation format of ISO 10646
+* [STD66] Uniform Resource Identifier (URI): Generic Syntax
+* [STD68] Augmented BNF for Syntax Specifications: ABNF
+
+# Informative References
+
+* [RFC1436] The Internet Gopher Protocol
+* [RFC7230] Hypertext Transfer Protocol
