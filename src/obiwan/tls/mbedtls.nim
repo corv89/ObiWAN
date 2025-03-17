@@ -60,7 +60,7 @@ proc mbedtls_x509_crt_init*(crt: ptr mbedtls_x509_crt) {.mbedtlsCerts.}
 proc mbedtls_x509_crt_parse_file*(crt: ptr mbedtls_x509_crt, path: cstring): cint {.mbedtlsCerts.}
 proc mbedtls_pk_init*(ctx: ptr mbedtls_pk_context) {.mbedtls.}
 # Import the platform-specific version of mbedtls_pk_parse_keyfile
-when defined(macosx):
+when defined(macosx) or defined(isMacOS):
   # macOS version has 5 parameters
   proc mbedtls_pk_parse_keyfile*(ctx: ptr mbedtls_pk_context, path: cstring, password: cstring, 
                                 f_rng: pointer, p_rng: pointer): cint {.mbedtls.}

@@ -1,6 +1,10 @@
 switch("path", ".") # Module search path
 switch("out", "build/")
 
+# Platform detection
+when defined(macosx):
+  switch("define", "isMacOS")
+
 # mbedTLS configuration (static linking) for MacOS
 switch("passL", "-L/opt/homebrew/opt/mbedtls/lib -Wl,-force_load /opt/homebrew/opt/mbedtls/lib/libmbedtls.a -Wl,-force_load /opt/homebrew/opt/mbedtls/lib/libmbedcrypto.a -Wl,-force_load /opt/homebrew/opt/mbedtls/lib/libmbedx509.a")
 switch("passC", "-I/opt/homebrew/opt/mbedtls/include")
