@@ -40,6 +40,24 @@ proc mbedtlsError(ret: int, msg: string): ref MbedtlsError =
   return newException(MbedtlsError, msg & ": " & errorStr & " (error code: 0x" & toHex(ret) & ")")
 
 proc newContext*(): MbedtlsSslContext =
+  ## Creates a new mbedTLS SSL context with proper initialization.
+  ##
+  ## This function creates and initializes a new SSL context with entropy,
+  ## random number generation, and default configuration suitable for
+  ## Gemini protocol TLS requirements. The context needs to be further
+  ## configured for client or server operation before use.
+  ##
+  ## Returns:
+  ##   A new initialized MbedtlsSslContext
+  ##
+  ## Raises:
+  ##   MbedtlsError: If initialization of any TLS component fails
+  ##
+  ## Example:
+  ##   ```nim
+  ##   var ctx = newContext()
+  ##   # Further configure the context for client or server use
+  ##   ```
   result = MbedtlsSslContext()
 
   # Initialize the entropy source and CTRDBG
@@ -94,11 +112,45 @@ proc customVerifyCallback(data: pointer, cert: ptr mbedtls.mbedtls_x509_crt, dep
   return 0
 
 proc setCustomVerify*(context: MbedtlsSslContext) =
+  ## Configures the mbedTLS context to use a custom certificate verification callback.
+  ##
+  ## This function sets up a certificate verification callback that implements
+  ## the Trust-On-First-Use (TOFU) model for Gemini. It accepts self-signed
+  ## certificates while still validating other aspects of certificate security.
+  ##
+  ## Parameters:
+  ##   context: The mbedTLS SSL context to configure
+  ##
+  ## Note:
+  ##   This is crucial for the Gemini protocol's security model, which 
+  ##   encourages the use of self-signed certificates.
   mbedtls.mbedtls_ssl_conf_verify(addr context.config, customVerifyCallback, nil)
 
+## X.509 certificate type used in TLS connections
+## 
+## This type represents an X.509 digital certificate used for authentication
+## in TLS connections. It provides methods for extracting certificate information
+## such as subject names and generating fingerprints.
 type X509Certificate* = ptr mbedtls.mbedtls_x509_crt
 
 proc commonName*(cert: X509Certificate): string =
+  ## Extracts the Common Name (CN) from an X.509 certificate.
+  ##
+  ## This function extracts the subject Common Name from a certificate, which
+  ## typically contains the domain name for server certificates or a user
+  ## identifier for client certificates.
+  ##
+  ## Parameters:
+  ##   cert: The X.509 certificate to extract information from
+  ##
+  ## Returns:
+  ##   The Common Name string, or an empty string if no CN is found or the certificate is nil
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let cn = response.certificate.commonName
+  ##   echo "Server certificate is for: ", cn
+  ##   ```
   debug("Getting commonName from certificate...")
   if cert.isNil:
     debug("WARNING: Certificate is nil, returning empty string")
@@ -132,6 +184,26 @@ proc commonName*(cert: X509Certificate): string =
   return commonName
 
 proc fingerprint*(cert: X509Certificate): string =
+  ## Generates a SHA-256 fingerprint of an X.509 certificate.
+  ##
+  ## This function computes a cryptographic fingerprint of the certificate,
+  ## which can be used to uniquely identify and verify certificates in a
+  ## Trust-On-First-Use (TOFU) security model. The fingerprint is presented
+  ## as a colon-separated hexadecimal string.
+  ##
+  ## Parameters:
+  ##   cert: The X.509 certificate to fingerprint
+  ##
+  ## Returns:
+  ##   SHA-256 fingerprint as a colon-separated hexadecimal string,
+  ##   or an empty string if the certificate is nil or hashing fails
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let fp = response.certificate.fingerprint
+  ##   echo "Certificate fingerprint: ", fp
+  ##   # Save fingerprint for TOFU validation on future connections
+  ##   ```
   debug("Getting fingerprint from certificate...")
   if cert.isNil:
     debug("WARNING: Certificate is nil, returning empty string")
@@ -163,6 +235,24 @@ proc fingerprint*(cert: X509Certificate): string =
   return result
 
 proc `$`*(cert: X509Certificate): string =
+  ## Returns a string representation of an X.509 certificate.
+  ##
+  ## This operator allows certificate objects to be easily printed or logged.
+  ## It returns a detailed, multi-line representation of the certificate
+  ## including subject, issuer, validity dates, and other important fields.
+  ##
+  ## Parameters:
+  ##   cert: The X.509 certificate to convert to a string
+  ##
+  ## Returns:
+  ##   A formatted string containing certificate details,
+  ##   or "(nil)" if the certificate is nil
+  ##
+  ## Example:
+  ##   ```nim
+  ##   echo "Certificate details:"
+  ##   echo response.certificate
+  ##   ```
   debug("Getting string representation of certificate...")
   if cert.isNil:
     debug("WARNING: Certificate is nil, returning (nil)")
@@ -306,6 +396,26 @@ proc my_bio_recv(ctx: pointer, buf: pointer, len: csize_t): cint {.cdecl.} =
 proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketObj,
                          handshakeFunc: proc(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint,
                          hostname: string) =
+  ## Sets up TLS on an existing socket connection and performs handshake.
+  ##
+  ## This function initializes a TLS session on top of an already connected
+  ## socket. It configures the TLS context with the specified hostname for
+  ## SNI (Server Name Indication), sets up the I/O callbacks, and performs 
+  ## the TLS handshake.
+  ##
+  ## Parameters:
+  ##   context: The SSL context to use for the TLS session
+  ##   socket: The socket object to wrap with TLS
+  ##   handshakeFunc: A function that performs either client or server handshake
+  ##   hostname: The server hostname for SNI (Server Name Indication)
+  ##
+  ## Raises:
+  ##   MbedtlsError: If the TLS setup or handshake fails
+  ##
+  ## Note:
+  ##   This function is used internally by both client and server implementations.
+  ##   For self-signed certificates, verification failures with specific error
+  ##   codes are accepted to support the Gemini protocol's security model.
   debug("Starting TLS session setup...")
 
   # Initialize SSL context
@@ -392,6 +502,27 @@ proc handshakeAsServer*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
 
 # Socket creation and connection functions
 proc dial*(address: string, port: int): MbedtlsSocket =
+  ## Establishes a TCP socket connection to the specified address and port.
+  ##
+  ## This function creates a new socket and connects it to the specified server,
+  ## handling both IPv4 and IPv6 addresses. It's used as the first step in
+  ## establishing a TLS connection to a Gemini server.
+  ##
+  ## Parameters:
+  ##   address: The hostname or IP address to connect to
+  ##   port: The TCP port number to connect to (usually 1965 for Gemini)
+  ##
+  ## Returns:
+  ##   A connected MbedtlsSocket
+  ##
+  ## Raises:
+  ##   MbedtlsError: If the connection fails
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let socket = dial("example.com", 1965)
+  ##   # The socket is now connected but not yet wrapped with TLS
+  ##   ```
   debug("Creating socket connection to " & address & ":" & $port)
   var socket = MbedtlsSocket(fd: -1)
   var socketContext: mbedtls.mbedtls_net_context
@@ -418,6 +549,25 @@ proc dial*(address: string, port: int): MbedtlsSocket =
 
 # Socket send/receive operations
 proc send*(socket: MbedtlsSocket, data: pointer, size: int): int =
+  ## Sends data over a TLS-encrypted connection.
+  ##
+  ## This function sends the specified data over a TLS-encrypted socket
+  ## connection. It handles the encryption transparently through mbedTLS.
+  ##
+  ## Parameters:
+  ##   socket: The TLS socket to send data through
+  ##   data: Pointer to the buffer containing the data to send
+  ##   size: Number of bytes to send
+  ##
+  ## Returns:
+  ##   The number of bytes successfully sent
+  ##
+  ## Raises:
+  ##   MbedtlsError: If the send operation fails or the socket is invalid
+  ##
+  ## Note:
+  ##   This function blocks until the data is sent or an error occurs.
+  ##   It may send fewer bytes than requested, so check the return value.
   debug("Sending data of size " & $size & " bytes")
   if socket.isNil:
     debug("ERROR: Socket is nil!")
@@ -456,6 +606,26 @@ proc send*(socket: MbedtlsSocket, data: pointer, size: int): int =
   return ret
 
 proc send*(socket: MbedtlsSocket, data: string): int =
+  ## Sends a string over a TLS-encrypted connection.
+  ##
+  ## This is a convenience overload that allows sending a string directly 
+  ## without manually handling pointers. It transparently handles the 
+  ## encryption through mbedTLS.
+  ##
+  ## Parameters:
+  ##   socket: The TLS socket to send data through
+  ##   data: The string to send
+  ##
+  ## Returns:
+  ##   The number of bytes successfully sent
+  ##
+  ## Raises:
+  ##   MbedtlsError: If the send operation fails or the socket is invalid
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let bytesWritten = socket.send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
+  ##   ```
   debug("Sending string of length " & $data.len)
   withDebug: 
     debug("String content: " & data)
