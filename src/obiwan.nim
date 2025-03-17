@@ -24,45 +24,100 @@ import obiwan/tls/async_socket as tlsAsyncSocket
 when defined(isMacOS):
   # Function for macOS - use our custom define
   proc parseKeyFile*(ctx: ptr tlsSocket.MbedtlsSslContext; keyFile: string): cint =
+    ## Parses a private key file in PEM format (macOS-specific implementation).
+    ##
+    ## This function handles the platform-specific requirements for macOS,
+    ## which needs additional parameters for the random number generator.
+    ##
+    ## Parameters:
+    ##   ctx: Pointer to the mbedTLS SSL context
+    ##   keyFile: Path to the private key file in PEM format
+    ##
+    ## Returns:
+    ##   0 on success, or a negative mbedTLS error code on failure
     # macOS requires 5 parameters
     mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil, mbedtls.mbedtls_ctr_drbg_random, addr ctx.ctr_drbg)
 else:
   # Function for Linux and other platforms
   proc parseKeyFile*(ctx: ptr tlsSocket.MbedtlsSslContext; keyFile: string): cint =
+    ## Parses a private key file in PEM format (Linux/other platform implementation).
+    ##
+    ## This function handles the platform-specific requirements for Linux and
+    ## other platforms that don't need additional random number generator parameters.
+    ##
+    ## Parameters:
+    ##   ctx: Pointer to the mbedTLS SSL context
+    ##   keyFile: Path to the private key file in PEM format
+    ##
+    ## Returns:
+    ##   0 on success, or a negative mbedTLS error code on failure
     # Linux only requires 3 parameters
     mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil)
 
 # Concrete type aliases for TLS implementation
 type
+  ## Certificate and error types
   X509Certificate* = tlsSocket.X509Certificate
+    ## X.509 certificate type for TLS encryption and authentication.
+  
   MbedtlsError* = tlsSocket.MbedtlsError
+    ## mbedTLS-specific error type.
 
-  # Socket types
+  ## Socket implementation types
   MbedtlsSocket* = tlsSocket.MbedtlsSocket
+    ## Synchronous TLS socket implementation using mbedTLS.
+  
   MbedtlsSocketObj* = tlsSocket.MbedtlsSocketObj
+    ## Concrete object type for synchronous TLS sockets.
+  
   MbedtlsAsyncSocket* = tlsAsyncSocket.MbedtlsAsyncSocket
+    ## Asynchronous TLS socket implementation using mbedTLS.
+  
   MbedtlsAsyncSocketObj* = tlsAsyncSocket.MbedtlsAsyncSocketObj
+    ## Concrete object type for asynchronous TLS sockets.
 
-  # Context types - type alias for implementation
+  ## TLS context types
   MbedtlsSslContext* = tlsSocket.MbedtlsSslContext
-  # Use the BaseSslContext as our SslContext
+    ## Concrete SSL/TLS context implementation using mbedTLS.
+  
   SslContext* = tlsSocket.BaseSslContext
+    ## Base SSL/TLS context type for both synchronous and asynchronous operations.
 
-  # Client types
+  ## Client types
   ObiwanClient* = ObiwanClientBase[MbedtlsSocket]
+    ## Synchronous Gemini protocol client.
+    ## Use this type for blocking, synchronous operations.
+  
   AsyncObiwanClient* = ObiwanClientBase[MbedtlsAsyncSocket]
+    ## Asynchronous Gemini protocol client.
+    ## Use this type for non-blocking, asynchronous operations.
 
-  # Response types
+  ## Response types
   Response* = ResponseBase[ObiwanClient]
+    ## Synchronous response from a Gemini server.
+    ## Contains status, meta information, and certificate details.
+  
   AsyncResponse* = ResponseBase[AsyncObiwanClient]
+    ## Asynchronous response from a Gemini server.
+    ## Contains status, meta information, and certificate details.
 
-  # Server types
+  ## Server types
   ObiwanServer* = ObiwanServerBase[MbedtlsSocket]
+    ## Synchronous Gemini protocol server.
+    ## Use this type for blocking, synchronous server implementations.
+  
   AsyncObiwanServer* = ObiwanServerBase[MbedtlsAsyncSocket]
+    ## Asynchronous Gemini protocol server.
+    ## Use this type for non-blocking, asynchronous server implementations.
 
-  # Request types
+  ## Request types
   Request* = RequestBase[MbedtlsSocket]
+    ## Synchronous request received by a Gemini server.
+    ## Contains URL, client certificate, and verification information.
+  
   AsyncRequest* = RequestBase[MbedtlsAsyncSocket]
+    ## Asynchronous request received by a Gemini server.
+    ## Contains URL, client certificate, and verification information.
 
 # Export public types and functions
 export common
@@ -80,7 +135,22 @@ export debug.debug, debug.debugf, debug.withDebug, debug.debugEnabled
 
 # Client API
 proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile, keyFile: string): bool =
-  ## Load a pair of certificate/key files in PEM format to be offered to the server
+  ## Loads a client certificate and private key from PEM files for client authentication.
+  ##
+  ## This allows the client to offer a certificate to the server when connecting, which
+  ## is used for client authentication in the Gemini protocol. The server may require
+  ## a certificate for certain resources (indicated by status codes 60-62).
+  ##
+  ## Parameters:
+  ##   client: The ObiwanClient or AsyncObiwanClient instance
+  ##   certFile: Path to the certificate file in PEM format
+  ##   keyFile: Path to the private key file in PEM format
+  ##
+  ## Returns:
+  ##   `true` if the certificate and key were loaded successfully, `false` otherwise
+  ##
+  ## Raises:
+  ##   No exceptions are raised; errors are reported via the return value.
   # Use the context directly as MbedtlsSslContext
   let ctx = MbedtlsSslContext(client.sslContext)
 
@@ -104,8 +174,31 @@ proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile, keyFi
 
 
 proc newObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): ObiwanClient =
-  ## Create a new synchronous Gemini client
-  ## Optionally, a certificate-based identity can be offered to the server
+  ## Creates a new synchronous Gemini protocol client.
+  ##
+  ## This function creates a synchronous client for making Gemini protocol requests.
+  ## The client handles TLS connections with proper certificate verification for the
+  ## Gemini protocol's security model, which includes support for self-signed certificates.
+  ##
+  ## Parameters:
+  ##   maxRedirects: Maximum number of redirects to follow automatically (default: 5)
+  ##   certFile: Optional path to client certificate file in PEM format (for client authentication)
+  ##   keyFile: Optional path to client private key file in PEM format (for client authentication)
+  ##
+  ## Returns:
+  ##   A new ObiwanClient instance ready for making requests
+  ##
+  ## Raises:
+  ##   ObiwanError: If certificate files are specified but cannot be loaded
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let client = newObiwanClient()
+  ##   let response = client.request("gemini://example.com/")
+  ##   if response.status == Status.Success:
+  ##     let content = response.body()
+  ##     echo content
+  ##   ```
   result = ObiwanClient(maxRedirects: maxRedirects)
   result.bodyStreamVariant = (isFutureStream: false)
   result.bodyStreamSync = newStringStream()
@@ -134,8 +227,34 @@ proc newObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): ObiwanClie
       raise newException(ObiwanError, "Failed to load certificate files.")
 
 proc newAsyncObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): AsyncObiwanClient =
-  ## Create a new asynchronous Gemini client
-  ## Optionally, a certificate-based identity can be offered to the server
+  ## Creates a new asynchronous Gemini protocol client.
+  ##
+  ## This function creates an asynchronous client for making non-blocking Gemini protocol
+  ## requests. The client handles TLS connections with proper certificate verification for
+  ## the Gemini protocol's security model, which includes support for self-signed certificates.
+  ##
+  ## Parameters:
+  ##   maxRedirects: Maximum number of redirects to follow automatically (default: 5)
+  ##   certFile: Optional path to client certificate file in PEM format (for client authentication)
+  ##   keyFile: Optional path to client private key file in PEM format (for client authentication)
+  ##
+  ## Returns:
+  ##   A new AsyncObiwanClient instance ready for making async requests
+  ##
+  ## Raises:
+  ##   ObiwanError: If certificate files are specified but cannot be loaded
+  ##
+  ## Example:
+  ##   ```nim
+  ##   proc main() {.async.} =
+  ##     let client = newAsyncObiwanClient()
+  ##     let response = await client.request("gemini://example.com/")
+  ##     if response.status == Status.Success:
+  ##       let content = await response.body()
+  ##       echo content
+  ##   
+  ##   waitFor main()
+  ##   ```
   result = AsyncObiwanClient(maxRedirects: maxRedirects)
   result.bodyStreamVariant = (isFutureStream: true)
   result.bodyStreamAsync = newFutureStream[string]("newAsyncObiwanClient")
@@ -201,9 +320,39 @@ proc loadUrl(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Resp
     client.socket.close()
 
 proc request*(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Response | AsyncResponse] {.multisync.} =
-  ## Retrieve status and meta from a server for a given url, handling redirects.
-  ## On success, the connection is kept open.
-  ## Get the body with response.body
+  ## Makes a Gemini protocol request to the specified URL and returns the response.
+  ##
+  ## This function handles the entire request process, including:
+  ## - Establishing TLS connection to the server
+  ## - Sending the URL request
+  ## - Parsing the server's response status and meta information
+  ## - Obtaining the server's certificate and verification status
+  ## - Automatically following redirects up to client.maxRedirects
+  ##
+  ## The connection remains open if the request was successful (Status.Success),
+  ## allowing the body content to be retrieved separately using the response.body() method.
+  ## For other status codes, the connection is closed automatically.
+  ##
+  ## Parameters:
+  ##   client: The ObiwanClient or AsyncObiwanClient to use for the request
+  ##   url: The Gemini URL to request (must use gemini:// scheme)
+  ##
+  ## Returns:
+  ##   A Response or AsyncResponse object containing status, meta, and certificate information
+  ##
+  ## Raises:
+  ##   ObiwanError: For network errors, malformed responses, invalid URLs, or too many redirects
+  ##
+  ## Example:
+  ##   ```nim
+  ##   # Synchronous example
+  ##   let client = newObiwanClient()
+  ##   let response = client.request("gemini://example.com/")
+  ##   
+  ##   # Asynchronous example
+  ##   let client = newAsyncObiwanClient()
+  ##   let response = await client.request("gemini://example.com/")
+  ##   ```
   var url = url
   result = await client.loadUrl(url)
   for i in 1..client.maxRedirects:
@@ -216,8 +365,40 @@ proc request*(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Res
   raise newException(ObiwanError, "too many redirects")
 
 proc body*(response: Response | AsyncResponse): Future[string] {.multisync.} =
-  ## Get the body associated with a response.
-  ## The connection is closed once the body has been retrieved.
+  ## Retrieves the body content associated with a successful response.
+  ##
+  ## This function reads the response body content from the server and returns it as a string.
+  ## The connection to the server is automatically closed once the entire body has been retrieved.
+  ## This should only be called on responses with Status.Success (20), as other status codes
+  ## won't have a body to retrieve.
+  ##
+  ## Parameters:
+  ##   response: The Response or AsyncResponse from a previous request call
+  ##
+  ## Returns:
+  ##   The complete body content as a string
+  ##
+  ## Raises:
+  ##   Various network-related exceptions may be raised during body retrieval
+  ##
+  ## Note:
+  ##   - For synchronous clients, this blocks until the entire body is received
+  ##   - For asynchronous clients, this returns a Future that completes when the body is fully received
+  ##
+  ## Example:
+  ##   ```nim
+  ##   # Synchronous example
+  ##   let response = client.request("gemini://example.com/")
+  ##   if response.status == Status.Success:
+  ##     let content = response.body()
+  ##     echo content
+  ##   
+  ##   # Asynchronous example
+  ##   let response = await client.request("gemini://example.com/")
+  ##   if response.status == Status.Success:
+  ##     let content = await response.body()
+  ##     echo content
+  ##   ```
   let client = response.client
 
   when response is AsyncResponse:
@@ -244,14 +425,63 @@ proc body*(response: Response | AsyncResponse): Future[string] {.multisync.} =
     return client.bodyStreamSync.readAll()
 
 proc close*(client: ObiwanClient | AsyncObiwanClient) =
-  ## Close the client's connection
+  ## Manually closes the client's connection to the server.
+  ##
+  ## This function explicitly closes the TLS socket connection to the server.
+  ## Normally, this is handled automatically by the body() method, but you can
+  ## use this method to close the connection early or if you don't need to
+  ## retrieve the body content.
+  ##
+  ## Parameters:
+  ##   client: The ObiwanClient or AsyncObiwanClient whose connection to close
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let client = newObiwanClient()
+  ##   let response = client.request("gemini://example.com/")
+  ##   # Close without reading the body
+  ##   client.close()
+  ##   ```
   if not client.socket.isNil():
     client.socket.close()
 
 # Server API
 proc respond*(req: Request | AsyncRequest, status: Status, meta: string, body: string = "") {.multisync.} =
-  ## Sends data back to a client as per the gemini protocol
-  ## meta cannot be more than 1024 characters
+  ## Sends a response to a client according to the Gemini protocol specification.
+  ##
+  ## This function constructs and sends a properly formatted Gemini response, consisting of:
+  ## - A status code (from the Status enum)
+  ## - A meta string (whose meaning depends on the status code)
+  ## - An optional body (only sent for Status.Success responses)
+  ##
+  ## The meta string's interpretation depends on the status code category:
+  ## - 1x (Input): A prompt for user input
+  ## - 2x (Success): A MIME type for the content (e.g., "text/gemini")
+  ## - 3x (Redirect): A target URL
+  ## - 4x/5x (Error): An error message
+  ## - 6x (Client Certificate): Information about certificate requirements
+  ##
+  ## Parameters:
+  ##   req: The Request or AsyncRequest to respond to
+  ##   status: The status code to send (see Status enum)
+  ##   meta: The meta information string (max 1024 characters)
+  ##   body: Optional body content (only sent for Status.Success)
+  ##
+  ## Raises:
+  ##   AssertionDefect: If meta exceeds 1024 characters
+  ##   Various exceptions may be caught internally and result in an error response
+  ##
+  ## Example:
+  ##   ```nim
+  ##   # Success response with content
+  ##   req.respond(Status.Success, "text/gemini", "# Welcome to my Gemini server\n\nHello world!")
+  ##   
+  ##   # Not found error
+  ##   req.respond(Status.NotFound, "Resource not available")
+  ##   
+  ##   # Redirect
+  ##   req.respond(Status.Redirect, "gemini://example.com/new-location")
+  ##   ```
   try:
     assert meta.len <= 1024
     when req is AsyncRequest:
@@ -271,8 +501,33 @@ proc respond*(req: Request | AsyncRequest, status: Status, meta: string, body: s
 
 # Method to accept connections for synchronous server
 proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), address = "") =
-  ## Start a server on the given port and call the callback for each client request
-  ## This is a blocking operation
+  ## Starts a synchronous Gemini protocol server on the specified port.
+  ##
+  ## This function starts a server that listens for incoming Gemini protocol requests.
+  ## For each connection, it handles the TLS handshake, reads the request, and calls
+  ## the provided callback function with a Request object. The callback is responsible
+  ## for calling respond() to send a response.
+  ##
+  ## Note that this is a blocking operation that runs indefinitely until the process
+  ## is terminated.
+  ##
+  ## Parameters:
+  ##   server: The ObiwanServer instance created with newObiwanServer()
+  ##   port: The port to listen on (standard Gemini port is 1965)
+  ##   callback: A procedure to call for each received request
+  ##   address: Optional IP address to bind to (default: "0.0.0.0" for all interfaces)
+  ##
+  ## Raises:
+  ##   ObiwanError: If the server fails to bind to the specified port
+  ##
+  ## Example:
+  ##   ```nim
+  ##   proc handleRequest(req: Request) =
+  ##     req.respond(Status.Success, "text/gemini", "# Hello from my Gemini server!")
+  ##   
+  ##   let server = newObiwanServer(certFile="server.crt", keyFile="server.key")
+  ##   server.serve(1965, handleRequest)
+  ##   ```
   debug("Starting synchronous server on port " & $port)
 
   # Create server socket
@@ -379,8 +634,36 @@ proc handleAsyncClient(server: AsyncObiwanServer, clientSocket: AsyncSocket,
 
 # Method to accept connections for asynchronous server
 proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncRequest): Future[void], address = ""): Future[void] {.async.} =
-  ## Start an async server on the given port and call the callback for each client request
-  ## This is a non-blocking operation
+  ## Starts an asynchronous Gemini protocol server on the specified port.
+  ##
+  ## This function starts an asynchronous server that listens for incoming Gemini protocol
+  ## requests without blocking the main thread. For each connection, it handles the TLS handshake,
+  ## reads the request, and calls the provided async callback function with an AsyncRequest object.
+  ## The callback is responsible for calling respond() to send a response.
+  ##
+  ## Although this function runs asynchronously, it still runs indefinitely until the Future
+  ## is cancelled or the process is terminated.
+  ##
+  ## Parameters:
+  ##   server: The AsyncObiwanServer instance created with newAsyncObiwanServer()
+  ##   port: The port to listen on (standard Gemini port is 1965)
+  ##   callback: An async procedure to call for each received request
+  ##   address: Optional IP address to bind to (default: "0.0.0.0" for all interfaces)
+  ##
+  ## Returns:
+  ##   A Future that completes when the server stops running (which is normally never)
+  ##
+  ## Example:
+  ##   ```nim
+  ##   proc handleRequest(req: AsyncRequest) {.async.} =
+  ##     req.respond(Status.Success, "text/gemini", "# Hello from my async Gemini server!")
+  ##   
+  ##   proc main() {.async.} =
+  ##     let server = newAsyncObiwanServer(certFile="server.crt", keyFile="server.key")
+  ##     await server.serve(1965, handleRequest)
+  ##   
+  ##   waitFor main()
+  ##   ```
   debug("Starting asynchronous server on port " & $port)
 
   # Create an async server socket
@@ -488,8 +771,33 @@ proc handleAsyncClient(server: AsyncObiwanServer, clientSocket: AsyncSocket,
 
 # Server creation
 proc newObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFile = "", sessionId = ""): ObiwanServer =
-  ## Creates a new server, certFile and keyFile are used to handle the TLS handshake
-  ## If a sessionId is not provided it is generated randomly and is used by TLS to resume sessions
+  ## Creates a new synchronous Gemini protocol server.
+  ##
+  ## This function creates a synchronous server for handling Gemini protocol requests.
+  ## A TLS certificate and private key are required for the server to function, as
+  ## the Gemini protocol mandates secure connections.
+  ##
+  ## The server supports optional client certificate verification, which can be used
+  ## to implement authentication. Client certificates are made available to request
+  ## handlers through the Request.certificate property.
+  ##
+  ## Parameters:
+  ##   reuseAddr: Allow reusing local addresses (default: true)
+  ##   reusePort: Allow multiple bindings to same port (default: false)
+  ##   certFile: Path to server certificate file in PEM format (required for production)
+  ##   keyFile: Path to server private key file in PEM format (required for production)
+  ##   sessionId: Optional custom session ID for TLS session resumption
+  ##
+  ## Returns:
+  ##   A new ObiwanServer instance that can be used with serve()
+  ##
+  ## Raises:
+  ##   ObiwanError: If certificate or key files cannot be loaded
+  ##
+  ## Note:
+  ##   If sessionId is not provided, a random one will be generated.
+  ##   For testing, you can omit certFile and keyFile, but for production use,
+  ##   valid certificate and key files are required.
   result = ObiwanServer(reuseAddr: reuseAddr, reusePort: reusePort)
 
   # Create TLS context
@@ -542,8 +850,33 @@ proc newObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFil
   #discard mbedtls.mbedtls_ssl_conf_session_id_context(addr actualContext.config, cast[ptr uint8](id.cstring), id.len.uint)
 
 proc newAsyncObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFile = "", sessionId = ""): AsyncObiwanServer =
-  ## Creates a new async server, certFile and keyFile are used to handle the TLS handshake
-  ## If a sessionId is not provided it is generated randomly and is used by TLS to resume sessions
+  ## Creates a new asynchronous Gemini protocol server.
+  ##
+  ## This function creates an asynchronous server for handling Gemini protocol requests
+  ## without blocking the main thread. A TLS certificate and private key are required for
+  ## the server to function, as the Gemini protocol mandates secure connections.
+  ##
+  ## The server supports optional client certificate verification, which can be used
+  ## to implement authentication. Client certificates are made available to request
+  ## handlers through the AsyncRequest.certificate property.
+  ##
+  ## Parameters:
+  ##   reuseAddr: Allow reusing local addresses (default: true)
+  ##   reusePort: Allow multiple bindings to same port (default: false)
+  ##   certFile: Path to server certificate file in PEM format (required for production)
+  ##   keyFile: Path to server private key file in PEM format (required for production)
+  ##   sessionId: Optional custom session ID for TLS session resumption
+  ##
+  ## Returns:
+  ##   A new AsyncObiwanServer instance that can be used with serve()
+  ##
+  ## Raises:
+  ##   ObiwanError: If certificate or key files cannot be loaded
+  ##
+  ## Note:
+  ##   If sessionId is not provided, a random one will be generated.
+  ##   For testing, you can omit certFile and keyFile, but for production use,
+  ##   valid certificate and key files are required.
   result = AsyncObiwanServer(reuseAddr: reuseAddr, reusePort: reusePort)
 
   # Create TLS context
