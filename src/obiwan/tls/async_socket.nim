@@ -8,6 +8,17 @@ import ../debug
 
 # Helper functions for async socket waiting
 proc waitForReadable(socket: AsyncFD): Future[void] =
+  ## Creates a Future that completes when the socket becomes readable.
+  ##
+  ## This is an internal helper function used to implement non-blocking I/O
+  ## with asynchronous TLS operations. It registers a callback with the async
+  ## dispatcher that will complete the returned future when data is available to read.
+  ##
+  ## Parameters:
+  ##   socket: The AsyncFD socket descriptor to wait on
+  ##
+  ## Returns:
+  ##   A Future[void] that completes when data is available to read
   var future = newFuture[void]("waitForReadable")
   proc cb(fd: AsyncFD): bool =
     future.complete()
@@ -16,6 +27,17 @@ proc waitForReadable(socket: AsyncFD): Future[void] =
   return future
 
 proc waitForWritable(socket: AsyncFD): Future[void] =
+  ## Creates a Future that completes when the socket becomes writable.
+  ##
+  ## This is an internal helper function used to implement non-blocking I/O
+  ## with asynchronous TLS operations. It registers a callback with the async
+  ## dispatcher that will complete the returned future when the socket is ready for writing.
+  ##
+  ## Parameters:
+  ##   socket: The AsyncFD socket descriptor to wait on
+  ##
+  ## Returns:
+  ##   A Future[void] that completes when the socket is ready for writing
   var future = newFuture[void]("waitForWritable")
   proc cb(fd: AsyncFD): bool =
     future.complete()
@@ -25,38 +47,108 @@ proc waitForWritable(socket: AsyncFD): Future[void] =
 
 # Base async socket object
 type
+  ## Object representing an asynchronous TLS socket.
+  ##
+  ## This type encapsulates a non-blocking socket with TLS encryption
+  ## capabilities, designed for use with Nim's asyncdispatch module.
+  ## It provides asynchronous I/O operations for Gemini protocol communication.
   MbedtlsAsyncSocketObj* = object
-    fd*: cint
-    domain*: cint
-    isBuffered*: bool
-    buffer*: string
-    sendQueue*: string
-    isSsl*: bool
-    sock*: int # AsyncFD is an int
-    sslContext*: MbedtlsSslContext
-    sslHandle*: ptr mbedtls.mbedtls_ssl_context
+    fd*: cint               ## Socket file descriptor
+    domain*: cint           ## Socket domain (AF_INET or AF_INET6)
+    isBuffered*: bool       ## Whether the socket uses buffering
+    buffer*: string         ## Buffer for received data
+    sendQueue*: string      ## Queue for data to be sent
+    isSsl*: bool            ## Whether TLS is enabled
+    sock*: int              ## AsyncFD representation (AsyncFD is an int wrapper)
+    sslContext*: MbedtlsSslContext  ## SSL context for TLS operations
+    sslHandle*: ptr mbedtls.mbedtls_ssl_context  ## Handle to mbedTLS SSL context
 
+  ## Reference type for asynchronous TLS socket.
+  ##
+  ## This is the primary type used for async TLS communication in the Gemini protocol.
+  ## It provides high-level methods for non-blocking TLS-encrypted network operations.
   MbedtlsAsyncSocket* = ref MbedtlsAsyncSocketObj
 
 proc getSslHandle*(socket: MbedtlsAsyncSocket): ptr mbedtls.mbedtls_ssl_context =
+  ## Retrieves the mbedTLS SSL context handle from an async socket.
+  ##
+  ## This function provides access to the underlying mbedTLS SSL context,
+  ## which can be used for direct TLS operations or certificate inspection.
+  ##
+  ## Parameters:
+  ##   socket: The async socket to get the SSL handle from
+  ##
+  ## Returns:
+  ##   Pointer to the mbedTLS SSL context
   socket.sslHandle
 
 proc newMbedtlsAsyncSocket*(): MbedtlsAsyncSocket =
+  ## Creates a new asynchronous TLS socket.
+  ##
+  ## This function initializes a new socket object for asynchronous TLS
+  ## communication. The socket is not yet connected or associated with 
+  ## a file descriptor - use the dial() function to establish a connection.
+  ##
+  ## Returns:
+  ##   A newly created MbedtlsAsyncSocket
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let socket = newMbedtlsAsyncSocket()
+  ##   socket = await dial("example.com", 1965)
+  ##   ```
   new(result)
-  result.fd = -1
-  result.domain = 2 # Domain.AF_INET
-  result.isBuffered = true
-  result.buffer = ""
-  result.sendQueue = ""
+  result.fd = -1            # Invalid FD until connected
+  result.domain = 2         # Domain.AF_INET default
+  result.isBuffered = true  # Enable buffering
+  result.buffer = ""        # Empty buffer
+  result.sendQueue = ""     # Empty send queue
   result.isSsl = true
   result.sslHandle = nil
   result.sock = -1 # asyncInvalidSocket
 
 proc isClosed*(socket: MbedtlsAsyncSocket): bool =
+  ## Checks if an async socket is closed.
+  ##
+  ## This function determines whether the socket has been closed
+  ## by checking if the file descriptor is invalid.
+  ##
+  ## Parameters:
+  ##   socket: The async socket to check
+  ##
+  ## Returns:
+  ##   `true` if the socket is closed, `false` otherwise
+  ##
+  ## Example:
+  ##   ```nim
+  ##   if socket.isClosed:
+  ##     socket = await dial("example.com", 1965)
+  ##   ```
   socket.fd == -1
 
 # Async socket operations
 proc dial*(address: string, port: int): Future[MbedtlsAsyncSocket] {.async.} =
+  ## Asynchronously establishes a TCP connection to the specified address and port.
+  ##
+  ## This function creates a new async socket and connects it to the specified server,
+  ## handling both IPv4 and IPv6 addresses. It configures the socket for non-blocking
+  ## operation and registers it with the async dispatcher.
+  ##
+  ## Parameters:
+  ##   address: The hostname or IP address to connect to
+  ##   port: The TCP port number to connect to (usually 1965 for Gemini)
+  ##
+  ## Returns:
+  ##   A Future that completes with a connected MbedtlsAsyncSocket
+  ##
+  ## Raises:
+  ##   OSError: If the connection fails
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let socket = await dial("example.com", 1965)
+  ##   # The socket is now connected but not yet wrapped with TLS
+  ##   ```
   var socket = newMbedtlsAsyncSocket()
 
   # Create the socket FD
@@ -87,6 +179,26 @@ proc dial*(address: string, port: int): Future[MbedtlsAsyncSocket] {.async.} =
 proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyncSocketObj,
                           handshakeFunc: proc(sslCtx: ptr mbedtls_ssl_context): cint,
                           hostname: string) {.async.} =
+  ## Asynchronously sets up TLS on an existing socket connection and performs handshake.
+  ##
+  ## This function initializes a TLS session on top of an already connected
+  ## socket. It configures the TLS context with the specified hostname for
+  ## SNI (Server Name Indication), sets up the I/O callbacks, and performs 
+  ## the TLS handshake asynchronously, handling WANT_READ/WANT_WRITE conditions.
+  ##
+  ## Parameters:
+  ##   context: The SSL context to use for the TLS session
+  ##   socket: The socket object to wrap with TLS
+  ##   handshakeFunc: A function that performs either client or server handshake
+  ##   hostname: The server hostname for SNI (Server Name Indication)
+  ##
+  ## Raises:
+  ##   OSError: If the TLS setup or handshake fails
+  ##
+  ## Note:
+  ##   This is an internal function used by the higher-level wrapConnectedSocket.
+  ##   For self-signed certificates, verification failures with specific error
+  ##   codes are accepted to support the Gemini protocol's security model.
   debug("Starting async TLS session setup...")
   
   # Initialize SSL context
@@ -188,6 +300,25 @@ proc handshakeAsClient*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
   return ret
 
 proc send*(socket: MbedtlsAsyncSocket, data: string) {.async.} =
+  ## Asynchronously sends data over a TLS-encrypted connection.
+  ##
+  ## This function sends the specified string over a TLS-encrypted socket
+  ## connection without blocking. It handles the encryption transparently 
+  ## through mbedTLS and manages asynchronous I/O with WANT_READ/WANT_WRITE
+  ## conditions. It ensures all data is sent, potentially over multiple
+  ## operations.
+  ##
+  ## Parameters:
+  ##   socket: The TLS async socket to send data through
+  ##   data: The string data to send
+  ##
+  ## Raises:
+  ##   OSError: If the send operation fails or the socket is invalid
+  ##
+  ## Example:
+  ##   ```nim
+  ##   await socket.send("gemini://example.com/\r\n")
+  ##   ```
   debug("Sending data of size " & $data.len & " bytes")
   var sent = 0
   while sent < data.len:
@@ -220,6 +351,30 @@ proc send*(socket: MbedtlsAsyncSocket, data: string) {.async.} =
     sent += ret.int
 
 proc recv*(socket: MbedtlsAsyncSocket, size: int): Future[string] {.async.} =
+  ## Asynchronously receives data from a TLS-encrypted connection.
+  ##
+  ## This function reads up to the specified number of bytes from a TLS-encrypted 
+  ## socket connection without blocking. It handles the decryption transparently
+  ## through mbedTLS and manages asynchronous I/O with WANT_READ/WANT_WRITE
+  ## conditions.
+  ##
+  ## Parameters:
+  ##   socket: The TLS async socket to receive data from
+  ##   size: Maximum number of bytes to receive
+  ##
+  ## Returns:
+  ##   A Future that completes with the received data as a string.
+  ##   The length may be less than the requested size if the connection
+  ##   was closed or if a partial read occurred.
+  ##
+  ## Raises:
+  ##   OSError: If the receive operation fails
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let data = await socket.recv(1024)
+  ##   echo "Received ", data.len, " bytes"
+  ##   ```
   debug("Attempting to receive up to " & $size & " bytes")
   var data = newString(size)
   var bytesReceived = 0
@@ -277,6 +432,28 @@ proc recv*(socket: MbedtlsAsyncSocket, size: int): Future[string] {.async.} =
   return data
 
 proc recvLine*(socket: MbedtlsAsyncSocket): Future[string] {.async.} =
+  ## Asynchronously reads a line of text from a TLS-encrypted connection.
+  ##
+  ## This function reads bytes one at a time until it encounters a newline character,
+  ## making it suitable for line-based protocols like Gemini. It automatically
+  ## handles CRLF line endings by trimming both CR and LF characters.
+  ##
+  ## Parameters:
+  ##   socket: The TLS async socket to read from
+  ##
+  ## Returns:
+  ##   A Future that completes with the line read from the socket,
+  ##   with trailing CR and LF characters removed
+  ##
+  ## Raises:
+  ##   EOFError: If the connection is closed and no data was read
+  ##   OSError: If there's an error reading from the socket
+  ##
+  ## Example:
+  ##   ```nim
+  ##   let response = await socket.recvLine()
+  ##   echo "Received response header: ", response
+  ##   ```
   debug("Reading a line from async socket...")
   result = ""
   while true:
@@ -305,6 +482,21 @@ proc recvLine*(socket: MbedtlsAsyncSocket): Future[string] {.async.} =
   debug("Processed line: " & result)
 
 proc close*(socket: MbedtlsAsyncSocket) =
+  ## Closes an async TLS socket and frees associated resources.
+  ##
+  ## This function performs a clean shutdown of the TLS connection by sending
+  ## a close notify alert, unregisters the socket from the async dispatcher,
+  ## and marks the socket as closed. This should be called when you're done
+  ## with a connection to properly free resources.
+  ##
+  ## Parameters:
+  ##   socket: The async TLS socket to close
+  ##
+  ## Example:
+  ##   ```nim
+  ##   await socket.send("QUIT\r\n")
+  ##   socket.close()
+  ##   ```
   if socket.fd != -1:
     debug("Closing async socket with fd=" & $socket.fd)
     if socket.sslHandle != nil:
