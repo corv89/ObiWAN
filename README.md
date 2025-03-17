@@ -33,6 +33,20 @@ On Linux:
 ```bash
 # Debian/Ubuntu
 sudo apt install libmbedtls-dev
+```
+
+### Installing Nim
+
+On macOS:
+```bash
+brew install nim
+```
+
+On Linux:
+```bash
+# Debian/Ubuntu
+sudo apt install nim
+```
 
 ### Installing ObiWAN
 
