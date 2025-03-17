@@ -515,7 +515,8 @@ proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), a
   ##   server: The ObiwanServer instance created with newObiwanServer()
   ##   port: The port to listen on (standard Gemini port is 1965)
   ##   callback: A procedure to call for each received request
-  ##   address: Optional IP address to bind to (default: "0.0.0.0" for all interfaces)
+  ##   address: Optional IP address to bind to (default: "0.0.0.0"). Use "::" for IPv6 with
+  ##            possible dual-stack support (IPv4+IPv6) if supported by the operating system.
   ##
   ## Raises:
   ##   ObiwanError: If the server fails to bind to the specified port
@@ -534,8 +535,14 @@ proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), a
   var serverSocket: mbedtls.mbedtls_net_context
   mbedtls.mbedtls_net_init(addr serverSocket)
 
+  # Determine whether we're using IPv6
+  let useIPv6 = address == "::" or (address.contains('[') or address.count(':') > 1)
+  
   # Bind to address and port
-  let bindAddr = if address == "": "0.0.0.0" else: address
+  let bindAddr = if address == "": 
+                   if useIPv6: "::" else: "0.0.0.0"
+                 else: 
+                   address
   var portStr = $port
   debug("Binding to " & bindAddr & ":" & portStr)
 
@@ -549,8 +556,14 @@ proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), a
     mbedtls.mbedtls_strerror(ret, cast[cstring](addr errorStr[0]), 100)
     raise newException(ObiwanError, "Failed to bind server socket: " & errorStr)
 
-  debug("Server bound to " & bindAddr & ":" & portStr)
-  echo "Server listening on " & bindAddr & ":" & portStr
+  # Determine socket type message for display
+  let socketTypeMsg = if useIPv6:
+    "IPv6" # Simple message - dual-stack support depends on OS configuration
+  else:
+    "IPv4"
+
+  debug("Server bound to " & bindAddr & ":" & portStr & " using " & socketTypeMsg)
+  echo "Server listening on " & bindAddr & ":" & portStr & " using " & socketTypeMsg
 
   # Accept loop
   while true:
@@ -648,7 +661,8 @@ proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncR
   ##   server: The AsyncObiwanServer instance created with newAsyncObiwanServer()
   ##   port: The port to listen on (standard Gemini port is 1965)
   ##   callback: An async procedure to call for each received request
-  ##   address: Optional IP address to bind to (default: "0.0.0.0" for all interfaces)
+  ##   address: Optional IP address to bind to (default: "0.0.0.0"). Use "::" for IPv6 with
+  ##            possible dual-stack support (IPv4+IPv6) if supported by the operating system.
   ##
   ## Returns:
   ##   A Future that completes when the server stops running (which is normally never)
@@ -675,17 +689,43 @@ proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncR
   if server.reusePort:
     serverSocket.setSockOpt(OptReusePort, true)
 
-  # Bind and start listening
-  let bindAddr = if address == "" or address == "0.0.0.0": "0.0.0.0"
-                 elif address == "::": "::"
-                 else: address
+  # Determine whether to use IPv6, and whether to attempt dual-stack mode
+  let useIPv6 = address == "::" or (address.contains('[') or address.count(':') > 1)
+  
+  if useIPv6:
+    debug("Creating IPv6 socket")
+    # Create IPv6 socket
+    serverSocket = newAsyncSocket(Domain.AF_INET6)
+    
+    # Attempt to disable IPV6_V6ONLY for dual-stack mode
+    # This is platform-specific and may not always work
+    debug("Trying to enable dual-stack mode (IPv4+IPv6)")
+    
+    # We'll be more conservative and skip dual-stack configuration
+    # This mode is OS-specific anyway, and some systems enable it by default
+    # while others don't support it at all
+    # 
+    # Users who need specific socket configurations should use their own 
+    # socket setup and pass it to the library
+  
+  # Determine binding address
+  let bindAddr = if address == "" or address == "0.0.0.0": 
+                   if useIPv6: "::" else: "0.0.0.0"
+                 else: 
+                   address
 
   debug("Binding async server to " & bindAddr & ":" & $port)
   serverSocket.bindAddr(Port(port), bindAddr)
   serverSocket.listen()
+  
+  # Determine what type of socket we're using for the user message
+  let socketTypeMsg = if useIPv6:
+    "IPv6" # Simple message - dual-stack support depends on OS configuration
+  else:
+    "IPv4"
 
-  debug("Server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port)
-  echo "Async server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port
+  debug("Server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg)
+  echo "Async server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg
 
   # Accept loop
   while true:

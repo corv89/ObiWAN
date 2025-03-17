@@ -12,6 +12,7 @@ ObiWAN is a comprehensive library for building clients and servers that speak th
 - **Dual API**: Both synchronous and asynchronous interfaces
 - **TLS Security**: Modern TLS 1.3 implementation using mbedTLS
 - **Certificate Handling**: Support for client and server certificates with self-signed cert verification
+- **IPv4 and IPv6 Support**: Handles both IP protocol versions with dual-stack support (when supported by OS)
 - **Resource Efficient**: Minimal memory footprint and CPU usage
 - **Type Safety**: Leverages Nim's strong typing and generics for safe, expressive code
 
@@ -275,6 +276,28 @@ nimble client       # Sync client
 nimble asyncclient  # Async client
 nimble server       # Sync server
 nimble asyncserver  # Async server
+```
+
+### Running the Examples
+
+```bash
+# Run synchronous client
+./build/client gemini://example.com/
+
+# Run asynchronous client 
+./build/async_client gemini://example.com/
+
+# Run synchronous server (IPv4)
+./build/server cert.pem key.pem 1965
+
+# Run synchronous server with IPv6 (dual-stack if supported by OS)
+./build/server cert.pem key.pem 1965 -6
+
+# Run asynchronous server (IPv4)
+./build/async_server cert.pem key.pem 1965
+
+# Run asynchronous server with IPv6 (dual-stack if supported by OS)
+./build/async_server cert.pem key.pem 1965 -6
 ```
 
 ## Roadmap

@@ -168,7 +168,9 @@ proc dial*(address: string, port: int): Future[MbedtlsAsyncSocket] {.async.} =
 
   # Assign the socket fd
   socket.fd = socketContext.fd
-  socket.domain = if address.contains(':'): 10 else: 2 # AF_INET6 = 10, AF_INET = 2
+  # Detect IPv6 addresses for proper socket domain
+  # IPv6 addresses have multiple colons and may be enclosed in square brackets
+  socket.domain = if address.contains('[') or address.count(':') > 1: 10 else: 2 # AF_INET6 = 10, AF_INET = 2
 
   # Register with async dispatcher
   socket.sock = socket.fd # AsyncFD is just an int wrapper

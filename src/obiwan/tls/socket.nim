@@ -31,7 +31,20 @@ type
 
 # Helper functions
 proc isIpv6Address(address: string): bool =
-  return address.contains(':')
+  ## Determines if a string is an IPv6 address.
+  ##
+  ## This is a helper function to detect IPv6 addresses for proper socket domain configuration.
+  ## It uses a more robust check than just looking for a colon, as that could also appear in
+  ## IPv4 addresses with port specifications or in hostnames with ports.
+  ##
+  ## Parameters:
+  ##   address: The address string to check
+  ##
+  ## Returns:
+  ##   true if the address appears to be an IPv6 address, false otherwise
+  # IPv6 addresses have multiple colons and may be enclosed in square brackets
+  # This is more robust than just checking for a single colon
+  return address.contains('[') or address.count(':') > 1
 
 # Error handling
 proc mbedtlsError(ret: int, msg: string): ref MbedtlsError =

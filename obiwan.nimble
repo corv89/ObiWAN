@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.2.0"
 author        = "Corvin Wimmer"
 description   = "A lightweight Gemini protocol client and server library in Nim."
 license       = "All Rights Reserved"

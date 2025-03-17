@@ -11,12 +11,13 @@
 ##
 ## Usage:
 ##   ```
-##   ./build/async_server [cert_file] [key_file] [port]
+##   ./build/async_server [cert_file] [key_file] [port] [-6]
 ##   ```
 ## Where:
 ##   - cert_file: Path to server certificate (defaults to "cert.pem")
 ##   - key_file: Path to server private key (defaults to "privkey.pem")
 ##   - port: Port to listen on (defaults to 1965)
+##   - -6: Optional flag to enable IPv6 support (listens on :: instead of 0.0.0.0)
 
 import asyncdispatch
 import os
@@ -67,16 +68,23 @@ when isMainModule:
     var certFile = if paramCount() >= 1: paramStr(1) else: "cert.pem"
     var keyFile = if paramCount() >= 2: paramStr(2) else: "privkey.pem"
     var port = if paramCount() >= 3: parseInt(paramStr(3)) else: 1965
+    # Support IPv6 with a -6 flag as the fourth argument
+    var useIPv6 = paramCount() >= 4 and paramStr(4) == "-6"
     
     # Initialize server with TLS certificates
     echo "Starting async server with certificates: ", certFile, ", ", keyFile
-    echo "Listening on port ", port, "..."
     var server = newAsyncObiwanServer(certFile = certFile, keyFile = keyFile)
     
     # Start serving requests asynchronously
     # This will run until the Future completes (which is normally never)
-    # For IPv6 support, use: waitFor server.serve(port, handleRequest, "::")
-    waitFor server.serve(port, handleRequest)
+    if useIPv6:
+      echo "Listening on IPv6 port ", port, "..."
+      # Use IPv6 any address (::)
+      waitFor server.serve(port, handleRequest, "::")
+    else:
+      echo "Listening on IPv4 port ", port, "..."
+      # Default to IPv4
+      waitFor server.serve(port, handleRequest)
   except:
     # Handle any exceptions that occur during server setup or operation
     echo "Error: ", getCurrentExceptionMsg()
