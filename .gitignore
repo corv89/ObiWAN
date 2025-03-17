@@ -8,3 +8,6 @@ htmldocs/
 
 # Build artifacts
 build/
+
+# Certificates
+certs/
