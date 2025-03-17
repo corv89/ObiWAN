@@ -48,6 +48,12 @@ On Linux:
 sudo apt install nim
 ```
 
+### Installing Nim dependencies
+
+```bash
+nimble install nimcrypto
+```
+
 ### Installing ObiWAN
 
 ```bash
