@@ -20,6 +20,18 @@ import obiwan/tls/mbedtls as mbedtls
 import obiwan/tls/socket as tlsSocket
 import obiwan/tls/async_socket as tlsAsyncSocket
 
+# Only declare the platform-specific version we need
+when defined(isMacOS):
+  # Function for macOS - use our custom define
+  proc parseKeyFile*(ctx: ptr tlsSocket.MbedtlsSslContext; keyFile: string): cint =
+    # macOS requires 5 parameters
+    mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil, mbedtls.mbedtls_ctr_drbg_random, addr ctx.ctr_drbg)
+else:
+  # Function for Linux and other platforms
+  proc parseKeyFile*(ctx: ptr tlsSocket.MbedtlsSslContext; keyFile: string): cint =
+    # Linux only requires 3 parameters
+    mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil)
+
 # Concrete type aliases for TLS implementation
 type
   X509Certificate* = tlsSocket.X509Certificate
@@ -76,7 +88,8 @@ proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile, keyFi
   if ret1 != 0:
     return false
 
-  let ret2 = mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil, mbedtls.mbedtls_ctr_drbg_random, addr ctx.ctr_drbg)
+  # Use unified function
+  let ret2 = parseKeyFile(unsafeAddr ctx, keyFile)
   if ret2 != 0:
     return false
 
@@ -400,7 +413,7 @@ proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncR
     var clientSocket: AsyncSocket
     try:
       clientSocket = await serverSocket.accept()
-      debug("Connection accepted, socket=" & $cast[int](clientSocket.getFd()))
+      debug("Connection accepted, socket=" & $int(clientSocket.getFd()))
     except:
       let errMsg = getCurrentExceptionMsg()
       debug("Error accepting connection: " & errMsg)
@@ -497,7 +510,8 @@ proc newObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFil
     if ret1 != 0:
       raise newException(ObiwanError, "Failed to parse certificate file")
 
-    let ret2 = mbedtls.mbedtls_pk_parse_keyfile(addr actualContext.key, keyFile, nil, mbedtls.mbedtls_ctr_drbg_random, addr actualContext.ctr_drbg)
+    # Use unified function with address-of operator
+    let ret2 = parseKeyFile(addr actualContext, keyFile)
     if ret2 != 0:
       raise newException(ObiwanError, "Failed to parse key file")
 
@@ -550,7 +564,8 @@ proc newAsyncObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", k
     if ret1 != 0:
       raise newException(ObiwanError, "Failed to parse certificate file")
 
-    let ret2 = mbedtls.mbedtls_pk_parse_keyfile(addr actualContext.key, keyFile, nil, mbedtls.mbedtls_ctr_drbg_random, addr actualContext.ctr_drbg)
+    # Use unified function with address-of operator
+    let ret2 = parseKeyFile(addr actualContext, keyFile)
     if ret2 != 0:
       raise newException(ObiwanError, "Failed to parse key file")
 

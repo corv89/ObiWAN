@@ -59,7 +59,14 @@ proc mbedtls_ssl_conf_verify*(conf: ptr mbedtls_ssl_config, f_vrfy: pointer, p_v
 proc mbedtls_x509_crt_init*(crt: ptr mbedtls_x509_crt) {.mbedtlsCerts.}
 proc mbedtls_x509_crt_parse_file*(crt: ptr mbedtls_x509_crt, path: cstring): cint {.mbedtlsCerts.}
 proc mbedtls_pk_init*(ctx: ptr mbedtls_pk_context) {.mbedtls.}
-proc mbedtls_pk_parse_keyfile*(ctx: ptr mbedtls_pk_context, path: cstring, password: cstring, f_rng: pointer, p_rng: pointer): cint {.mbedtls.}
+# Import the platform-specific version of mbedtls_pk_parse_keyfile
+when defined(macosx):
+  # macOS version has 5 parameters
+  proc mbedtls_pk_parse_keyfile*(ctx: ptr mbedtls_pk_context, path: cstring, password: cstring, 
+                                f_rng: pointer, p_rng: pointer): cint {.mbedtls.}
+else:
+  # Linux version has 3 parameters
+  proc mbedtls_pk_parse_keyfile*(ctx: ptr mbedtls_pk_context, path: cstring, password: cstring): cint {.mbedtls.}
 proc mbedtls_ssl_conf_own_cert*(conf: ptr mbedtls_ssl_config, cert: ptr mbedtls_x509_crt, key: ptr mbedtls_pk_context): cint {.mbedtls.}
 
 # Entropy and random number generation
