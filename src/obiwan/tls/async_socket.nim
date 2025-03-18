@@ -510,7 +510,7 @@ proc close*(socket: MbedtlsAsyncSocket) =
       debug("Unregistering from async dispatcher")
       try:
         asyncdispatch.unregister(asyncdispatch.AsyncFD(socket.sock))
-      except:
+      except CatchableError:
         debug("Error during unregister (ignoring)")
       socket.sock = -1
 

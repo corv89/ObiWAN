@@ -532,7 +532,7 @@ proc respond*(req: Request | AsyncRequest, status: Status, meta: string, body: s
       discard req.client.send($status.int & ' ' & meta & "\r\n")
       if status == Status.Success:
         discard req.client.send(body)
-  except:
+  except CatchableError:
     echo getCurrentExceptionMsg()
     when req is AsyncRequest:
       await req.client.send($Status.Error.int & " INTERNAL ERROR\r\n")
@@ -603,7 +603,9 @@ proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), a
     "IPv4"
 
   debug("Server bound to " & bindAddr & ":" & portStr & " using " & socketTypeMsg)
-  echo "Server listening on " & bindAddr & ":" & portStr & " using " & socketTypeMsg
+  # Only show server listening message if verbose level is 1 or higher
+  if obiwan.debug.verbosityLevel > 0:
+    echo "Server listening on " & bindAddr & ":" & portStr & " using " & socketTypeMsg
 
   # Accept loop
   while true:
@@ -765,7 +767,9 @@ proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncR
     "IPv4"
 
   debug("Server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg)
-  echo "Async server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg
+  # Only show server listening message if verbose level is 1 or higher
+  if obiwan.debug.verbosityLevel > 0:
+    echo "Async server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg
 
   # Accept loop
   while true:

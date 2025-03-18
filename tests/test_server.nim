@@ -10,7 +10,7 @@ import os
 import osproc
 import strutils
 import strformat
-import asyncdispatch
+# import asyncdispatch  # Unused import removed
 
 # The path is provided via the --path:src command line option
 

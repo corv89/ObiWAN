@@ -56,6 +56,6 @@ when isMainModule:
     # Display response body content
     echo "Response body:"
     echo response.body
-  except:
+  except CatchableError:
     # Handle any errors that occurred during the request
     echo "Error: ", getCurrentExceptionMsg()

@@ -224,21 +224,9 @@ suite "Gemini Protocol Tests":
       error("Certificate required test failed: " & e.msg)
       fail()
       
-  # Client certificate authentication
-  test "Client Certificate Authentication":
-    # Skip for now - we've determined there's an issue with the TLS handshake 
-    # when client certificates are used with mbedTLS
-    skip()
-    
-    # NOTE: The problem appears to be related to how client certificates are being
-    # processed during the TLS handshake. The client fails to properly present the
-    # certificate to the server or the server fails to process it correctly.
-    #
-    # This is a complex issue potentially related to mbedTLS configuration or
-    # certificate management that requires deeper investigation.
-    #
-    # For now, we'll skip this test and implement proper client certificate support
-    # in a future update.
+  # Note: Client certificate authentication is tested separately in test_real_server.nim
+  # We don't include it in the protocol test suite since it requires the actual server
+  # implementation rather than the test server.
     
   # Test IPv4 connectivity
   test "IPv4 Connection Test":

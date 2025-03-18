@@ -65,7 +65,7 @@ proc main() {.async.} =
 
     # Asynchronously retrieve and display the response body
     echo "Body: " & await response.body
-  except:
+  except CatchableError:
     # Handle any errors that occurred during the async request
     echo getCurrentExceptionMsg()
 

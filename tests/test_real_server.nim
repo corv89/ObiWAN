@@ -8,10 +8,11 @@
 ## with client certificates (including with external clients like Lagrange), the
 ## test server environment fails with connection reset errors.
 
+
 import asyncdispatch
 import os
 import strutils # For parseInt
-import strformat # For fmt
+import unittest # For test framework
 import "../src/obiwan"
 
 # Create certificate directories if they don't exist
@@ -50,143 +51,98 @@ proc ensureCertificatesExist() =
 
 # Server request handler
 proc handleRequest(request: AsyncRequest) {.async.} =
-  echo "Request path: ", request.url.path
   if request.url.path == "/auth":
     if not request.hasCertificate():
       # Client didn't provide a certificate, request one
-      echo "Client didn't provide a certificate"
       await request.respond(CertificateRequired, "CLIENT CERTIFICATE REQUIRED")
     elif not (request.isVerified() or request.isSelfSigned()):
       # Certificate was provided but isn't valid
-      echo "Certificate not valid"
       await request.respond(CertificateRequired, "CERTIFICATE NOT VALID")
     else:
       # Client certificate is valid (either verified or self-signed)
-      echo "Client certificate accepted"
       var response = "# Certificate accepted\n\n"
+      response.add("## Certificate Information\n\n")
       if request.certificate != nil:
-        response.add("## Certificate Information\n\n")
         response.add("Certificate available\n")
         response.add("Verified: " & $request.isVerified & "\n")
         response.add("Self-signed: " & $request.isSelfSigned & "\n\n")
-        
-        try:
-          # We don't have direct access to certificate info struct
-          # Just mention that certificate is available
-          response.add("Certificate details not accessible through API\n")
-        except:
-          response.add("Error processing certificate: " & getCurrentExceptionMsg() & "\n")
-      
       response.add("Hello authenticated client!")
       await request.respond(Success, "text/gemini", response)
   else:
     # Default welcome page
-    await request.respond(Success, "text/gemini", "# Hello world\n\nThis is the ObiWAN test server.\n\nTry visiting /auth to test client certificate authentication.")
+    await request.respond(Success, "text/gemini", "# Hello world\n\nThis is the ObiWAN test server.")
 
 # Main application code
-proc runServer() {.async.} =
-  try:
-    # Initialize server with TLS certificates (use more detailed errors)
-    echo "Starting server with certificates: ", serverCertPath, ", ", serverKeyPath
-    
-    # Enable debug mode for more verbose output
-    setVerbosityLevel(3)  # Maximum verbosity
-    
-    var server = newAsyncObiwanServer(
-      certFile = serverCertPath, 
-      keyFile = serverKeyPath
-      # Client certs are requested in the handler, not globally required
-    )
-    
-    echo "Server created successfully. Listening on port 1965..."
-    await server.serve(1965, handleRequest)
-  except:
-    # Handle any exceptions that occur during server setup or operation
-    echo "Server error: ", getCurrentExceptionMsg()
+# Server is created and started directly in suiteSetup
 
-# Client implementation to test against our server
-proc runClient() {.async.} =
-  try:
-    echo "Starting client with certificates: ", clientCertPath, ", ", clientKeyPath
-    
-    # Create client with certificates
-    var client = newAsyncObiwanClient(
-      certFile = clientCertPath,
-      keyFile = clientKeyPath
-    )
-    
-    # First try a normal request (without client cert)
-    echo "\n--- Testing normal request (no client cert) ---"
-    var response = await client.request("gemini://localhost:1965/")
-    echo "Status: ", response.status
-    echo "Meta: ", response.meta
-    if response.status == Success:
-      # Since body is an async method, we need to await it
-      let body = await response.body()
-      let truncatedBody = if body.len > 100: body[0..99] & "..." else: body
-      echo "Body: ", truncatedBody
-    
-    # Now try with client certificate
-    echo "\n--- Testing authenticated request (with client cert) ---"
-    response = await client.request("gemini://localhost:1965/auth")
-    echo "Status: ", response.status
-    echo "Meta: ", response.meta
-    if response.status == Success:
-      let body = await response.body()
-      echo "Body: ", body
-    elif response.status == CertificateRequired:
-      echo "Certificate required. Retrying with cert..."
-      # Reload the client certificate to make sure it's used
-      if not client.loadIdentityFile(certFile=clientCertPath, keyFile=clientKeyPath):
-        echo "Failed to load client certificate, continuing anyway..."
-      response = await client.request("gemini://localhost:1965/auth")
-      echo "Status: ", response.status
-      echo "Meta: ", response.meta
-      if response.status == Success:
-        let body = await response.body()
-        echo "Body: ", body
-      else:
-        echo "Still failed after providing certificate"
-    else:
-      echo "Unexpected status"
-  except:
-    echo "Client error: ", getCurrentExceptionMsg()
+# Client implementation uses the unittest framework test cases now
 
-# Run the test
-proc main() {.async.} =
+# Test suite for client certificate authentication
+suite "Client Certificate Authentication Tests":
+  
+  # Shared server - initialized once before tests
+  var server: AsyncObiwanServer = nil
+  var serverInitialized = false
+
   # Ensure certificates exist
   ensureCertificatesExist()
   
-  # Start server in background
-  asyncCheck runServer()
-  echo "Server running in background..."
+  # Set minimal verbosity level
+  setVerbosityLevel(0)
   
-  # Wait a moment for server to start
-  await sleepAsync(1000)
+  # Prepare test environment 
+  setup:
+    # Initialize server only once for all tests
+    if not serverInitialized:
+      # Create server
+      server = newAsyncObiwanServer(
+        certFile = serverCertPath, 
+        keyFile = serverKeyPath
+      )
+      
+      # Start server in background
+      asyncCheck server.serve(1965, handleRequest)
+      
+      # Wait for server to initialize
+      waitFor sleepAsync(1000)
+      serverInitialized = true
   
-  # Run client test
-  echo "Running client test..."
-  await runClient()
+  # Clean up after tests
+  teardown:
+    # Nothing to do - server will stop when test completes
+    discard
   
-  # Run an additional test with explicit client cert
-  echo "\n--- Testing with explicit client certificate ---"
-  var client = newAsyncObiwanClient()
-  if client.loadIdentityFile(certFile=clientCertPath, keyFile=clientKeyPath):
-    echo "Client certificate loaded successfully"
-    var response = await client.request("gemini://localhost:1965/auth")
-    echo "Status: ", response.status
-    echo "Meta: ", response.meta
-    if response.status == Success:
-      let body = await response.body()
-      echo "Body: ", body
-  else:
-    echo "Failed to load client certificate"
+  # Test basic connection without certificate
+  test "Basic Connection Test":
+    proc testBasicConnection() {.async.} =
+      var client = newAsyncObiwanClient()
+      var response = await client.request("gemini://localhost:1965/")
+      check response.status == Success
+      client.close()
+    
+    waitFor testBasicConnection()
   
-  # Keep server running briefly to allow external testing
-  echo "\nServer will remain running for 5 seconds for external testing..."
-  echo "You can test with Lagrange using: gemini://localhost:1965/auth"
-  await sleepAsync(5000)
-  echo "Test complete"
+  # Test certificate required response
+  test "Certificate Required Test":
+    proc testCertRequired() {.async.} =
+      var client = newAsyncObiwanClient()
+      var response = await client.request("gemini://localhost:1965/auth")
+      check response.status == CertificateRequired
+      client.close()
+    
+    waitFor testCertRequired()
+  
+  # Test with valid certificate
+  test "Valid Certificate Test":
+    proc testValidCert() {.async.} =
+      var client = newAsyncObiwanClient()
+      check client.loadIdentityFile(certFile=clientCertPath, keyFile=clientKeyPath)
+      var response = await client.request("gemini://localhost:1965/auth")
+      check response.status == Success
+      client.close()
+    
+    waitFor testValidCert()
 
 when isMainModule:
-  waitFor main()
+  # Run the test suite
+  discard

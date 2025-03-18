@@ -4,22 +4,19 @@
 ## Gemini protocol specification, focusing on handling of various response formats,
 ## error conditions, and certificate handling.
 
+
 import unittest
-import uri
 import net
 import os
 import osproc
 import strutils
 import strformat
 import asyncdispatch
-import std/tempfiles
 
 # The path is provided via the --path:src command line option
 
 # Now import our package
 import obiwan
-import obiwan/client/sync
-import obiwan/client/async
 import obiwan/common
 import obiwan/debug
 
@@ -221,15 +218,19 @@ suite "ObiWAN Client Tests":
     # Test async client functionality
     proc testAsync() {.async.} =
       let client = newAsyncObiwanClient()
-      let response = await client.request(fmt"gemini://{IPv4Localhost}:{TestPort}/")
-      
-      check response.status == Success
-      check response.meta == "text/gemini"
-      
-      let body = await response.body
-      check body.len > 0
-      
-      client.close()
+      try:
+        let response = await client.request(fmt"gemini://{IPv4Localhost}:{TestPort}/")
+        
+        check response.status == Success
+        check response.meta == "text/gemini"
+        
+        let body = await response.body
+        check body.len > 0
+      except CatchableError as e:
+        echo "Async client request failed: " & e.msg
+        check false # Mark the test as failed
+      finally:
+        client.close()
     
     waitFor testAsync()
 
