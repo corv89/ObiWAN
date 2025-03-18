@@ -1,0 +1,5 @@
+build/
+bindings/generated/python/__pycache__/
+*.so
+*.dylib
+
