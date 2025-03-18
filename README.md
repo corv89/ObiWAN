@@ -56,13 +56,17 @@ On Linux:
 sudo apt install nim
 ```
 
-### Installing Nim dependencies
+### Installing ObiWAN dependencies
+
+This will let you generate bindings for languages other than Nim.
 
 ```bash
-nimble install nimcrypto
+nimble develop
 ```
 
 ### Installing ObiWAN
+
+Install the ObiWAN package if you want to call it from Nim.
 
 ```bash
 nimble install https://github.com/corv89/ObiWAN
@@ -75,7 +79,7 @@ requires "obiwan >= 0.1.0"
 
 ## Generating Certificates
 
-For testing and development, generate a self-signed certificate:
+Generate a self-signed certificate to run the server
 
 ```bash
 mkdir -p certs
@@ -280,20 +284,20 @@ src/
 
 ## Building Examples
 
-Use these Nimble tasks to build the example clients and servers:
+Use these Nimble tasks to build clients and servers:
 
 ```bash
-# Build all examples
+# Build all programs
 nimble buildall
 
-# Build individual examples
+# Build individual programs
 nimble client       # Sync client
 nimble asyncclient  # Async client
 nimble server       # Sync server
 nimble asyncserver  # Async server
 ```
 
-### Running the Examples
+### Running ObiWAN
 
 ```bash
 # Run synchronous client
@@ -322,6 +326,9 @@ Use these Nimble tasks to run the test suite:
 ```bash
 # Run all tests
 nimble test
+
+# Run all tests in parallel (but out of order)
+nimble testparallel
 
 # Run specific test suites
 nimble testserver   # Server tests
