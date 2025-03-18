@@ -4,7 +4,7 @@ A lightweight Gemini protocol client and server library in Nim.
 
 ## What is ObiWAN?
 
-ObiWAN is a comprehensive library for building clients and servers that speak the [Gemini protocol](https://gemini://geminiprotocol.net/docs/specification.html), a lightweight alternative to HTTP designed for simplicity and privacy. The library provides both synchronous and asynchronous APIs with a clean, type-safe interface.
+ObiWAN is a comprehensive library for building clients and servers that speak the [Gemini protocol](https://geminiprotocol.net/docs/specification.html), a lightweight alternative to HTTP designed for simplicity and privacy. The library provides both synchronous and asynchronous APIs with a clean, type-safe interface.
 
 ## Features
 
@@ -284,7 +284,7 @@ nimble asyncserver  # Async server
 # Run synchronous client
 ./build/client gemini://example.com/
 
-# Run asynchronous client 
+# Run asynchronous client
 ./build/async_client gemini://example.com/
 
 # Run synchronous server (IPv4)
