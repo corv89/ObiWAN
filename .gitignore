@@ -15,3 +15,6 @@ tests/certs
 
 # Vendor
 vendor/
+
+# Bindings
+bindings/generated
