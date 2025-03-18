@@ -1,5 +1,6 @@
 build/
-bindings/generated/python/__pycache__/
+# Only ignore Python cache files, not the entire generated directory
+generated/python/__pycache__/
 *.so
 *.dylib
 

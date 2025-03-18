@@ -16,5 +16,4 @@ tests/certs
 # Vendor
 vendor/
 
-# Bindings
-bindings/generated
+# No longer ignoring generated bindings
