@@ -5,10 +5,28 @@ switch("out", "build/")
 when defined(macosx):
   switch("define", "isMacOS")
 
-# mbedTLS configuration (static linking) for MacOS
-switch("passL", "-L/opt/homebrew/opt/mbedtls/lib -Wl,-force_load /opt/homebrew/opt/mbedtls/lib/libmbedtls.a -Wl,-force_load /opt/homebrew/opt/mbedtls/lib/libmbedcrypto.a -Wl,-force_load /opt/homebrew/opt/mbedtls/lib/libmbedx509.a")
-switch("passC", "-I/opt/homebrew/opt/mbedtls/include")
+# mbedTLS configuration (using vendored mbedTLS)
+# Get the project root directory
+import os
+let projectRoot = getCurrentDir()
+let mbedTLSRoot = projectRoot & "/vendor/mbedtls"
+
+# Use the vendored mbedTLS instead of system one
+switch("passC", "-I" & mbedTLSRoot & "/include")
 switch("define", "useMbedTLS")
+
+# Compile mbedTLS libraries and link statically
+# This assumes we'll build the mbedTLS libraries separately
+when defined(macosx):
+  switch("passL", "-L" & mbedTLSRoot & "/library -Wl,-force_load " & 
+    mbedTLSRoot & "/library/libmbedtls.a -Wl,-force_load " & 
+    mbedTLSRoot & "/library/libmbedcrypto.a -Wl,-force_load " & 
+    mbedTLSRoot & "/library/libmbedx509.a")
+else:
+  switch("passL", "-L" & mbedTLSRoot & "/library -Wl,--whole-archive " & 
+    mbedTLSRoot & "/library/libmbedtls.a " & 
+    mbedTLSRoot & "/library/libmbedcrypto.a " & 
+    mbedTLSRoot & "/library/libmbedx509.a -Wl,--no-whole-archive")
 
 # Optimization options
 when defined(release):

@@ -21,19 +21,26 @@ ObiWAN is a comprehensive library for building clients and servers that speak th
 ### Prerequisites
 
 - Nim 2.2.2 or later
-- mbedTLS 3.6.2 or later
+- mbedTLS 3.6.2 (vendored as a git submodule)
 
-### Installing mbedTLS
+### MbedTLS
 
-On macOS:
+ObiWAN uses mbedTLS 3.6.2 that is included as a git submodule. When you clone the repository, make sure to include submodules:
+
 ```bash
-brew install mbedtls
+git clone --recurse-submodules https://github.com/corv89/ObiWAN.git
 ```
 
-On Linux:
+Or if you already cloned the repository:
+
 ```bash
-# Debian/Ubuntu
-sudo apt install libmbedtls-dev
+git submodule update --init
+```
+
+The build system will automatically build mbedTLS when needed, or you can build it manually with:
+
+```bash
+nimble buildmbedtls
 ```
 
 ### Installing Nim
@@ -328,7 +335,7 @@ nimble testurl      # URL parsing tests
 - [ ] Gemini text format (text/gemini) parser
 - [x] Comprehensive test suite
 - [ ] Improved documentation
-- [ ] Optimized mbedTLS build size
+- [x] Vendored mbedTLS 3.6.2
 - [ ] Complete server implementation
 - [ ] CGI support
 - [ ] MIME type support

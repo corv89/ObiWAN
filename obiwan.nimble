@@ -24,13 +24,26 @@ task asyncserver, "Build async server":
   exec "nim c -o:build/async_server src/obiwan/server/async.nim"
 
 task buildall, "Build all":
+  # First build mbedTLS if not already built
+  let mbedtlsLib = thisDir() & "/vendor/mbedtls/library/libmbedtls.a"
+  if not fileExists(mbedtlsLib):
+    echo "Building vendored mbedTLS first..."
+    exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
+  
+  # Now build the ObiWAN components
   exec "nim c -o:build/client src/obiwan/client/sync.nim"
   exec "nim c -o:build/async_client src/obiwan/client/async.nim"
   exec "nim c -o:build/server src/obiwan/server/sync.nim"
   exec "nim c -o:build/async_server src/obiwan/server/async.nim"
 
 task test, "Run all tests in sequence":
-  # First ensure certificates are properly set up
+  # First build mbedTLS if not already built
+  let mbedtlsLib = thisDir() & "/vendor/mbedtls/library/libmbedtls.a"
+  if not fileExists(mbedtlsLib):
+    echo "Building vendored mbedTLS first..."
+    exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
+  
+  # Ensure certificates are properly set up
   echo "Ensuring test certificates are available..."
   exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
 
@@ -74,7 +87,13 @@ task test, "Run all tests in sequence":
   # exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r --hints:off --path:src tests/ipv6_test.nim"
 
 task testparallel, "Run all tests in parallel":
-  # First ensure certificates are properly set up
+  # First build mbedTLS if not already built
+  let mbedtlsLib = thisDir() & "/vendor/mbedtls/library/libmbedtls.a"
+  if not fileExists(mbedtlsLib):
+    echo "Building vendored mbedTLS first..."
+    exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
+    
+  # Ensure certificates are properly set up
   echo "Ensuring test certificates are available..."
   exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
 
@@ -136,6 +155,11 @@ task testprotocol, "Run protocol compliance tests":
   echo "Ensuring test certificates are available..."
   exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
   exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c --parallelBuild:0 -d:release -r --hints:off --path:src tests/test_protocol.nim"
+
+task buildmbedtls, "Build the vendored mbedTLS library":
+  echo "Building vendored mbedTLS 3.6.2..."
+  exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
+  echo "mbedTLS build complete."
 
 task testhelp, "Show information about test tasks":
   echo """

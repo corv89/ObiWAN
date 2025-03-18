@@ -1,0 +1,2 @@
+# Mark vendored mbedTLS as vendored code for GitHub language stats
+vendor/mbedtls/* linguist-vendored
