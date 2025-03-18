@@ -313,21 +313,6 @@ src/
 │       └── async.nim       # Asynchronous server
 ```
 
-## Building Examples
-
-Use these Nimble tasks to build clients and servers:
-
-```bash
-# Build all programs
-nimble buildall
-
-# Build individual programs
-nimble client       # Sync client
-nimble asyncclient  # Async client
-nimble server       # Sync server
-nimble asyncserver  # Async server
-```
-
 ### Running Tests
 
 Use these Nimble tasks to run the test suite:
