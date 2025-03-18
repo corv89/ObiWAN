@@ -18,6 +18,7 @@ import uri
 import os
 import strformat
 import net
+import osproc
 
 const
   TestPort = 1967  # Use non-standard port for testing
