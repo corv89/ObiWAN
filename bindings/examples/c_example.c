@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include "../generated/obiwan.h"
 
 int main() {
@@ -14,6 +15,9 @@ int main() {
     ObiwanClientHandle client = createClient(5, "", "");
     if (client == NULL) {
         printf("Failed to create Gemini client\n");
+        if (hasError()) {
+            printf("Error: %s\n", getLastError());
+        }
         return 1;
     }
 
@@ -21,29 +25,49 @@ int main() {
     const char* url = "gemini://gemini.circumlunar.space/";
     printf("Sending request to: %s\n", url);
 
-    ObiwanResponseData response;
-    int result = requestUrl(client, url, &response);
+    ObiwanResponseHandle response = requestUrl(client, url);
     
-    if (result != 0) {
+    if (response == NULL) {
         printf("Failed to get response\n");
+        if (hasError()) {
+            printf("Error: %s\n", getLastError());
+        }
         destroyClient(client);
         return 1;
     }
 
     // Get the status code and meta information
+    int status = getResponseStatus(response);
+    const char* meta = getResponseMeta(response);
+    
     printf("\nResponse received:\n");
-    printf("Status: %d\n", response.status);
-    printf("Meta: %s\n", response.meta);
-
+    printf("Status: %d\n", status);
+    printf("Meta: %s\n", meta);
+    
+    // Certificate information
+    printf("\nCertificate info:\n");
+    printf("- Has certificate: %s\n", responseHasCertificate(response) ? "yes" : "no");
+    printf("- Is verified: %s\n", responseIsVerified(response) ? "yes" : "no");
+    printf("- Is self-signed: %s\n", responseIsSelfSigned(response) ? "yes" : "no");
+    
     // Only try to read the body if the status is 20 (Success)
-    if (response.status == SUCCESS && response.hasBody) {
+    if (status == OBIWAN_SUCCESS) {
         printf("\nFetching body content...\n");
-        printf("\n--- CONTENT ---\n%s\n--- END OF CONTENT ---\n", response.body);
+        const char* body = getResponseBody(response);
+        if (body != NULL) {
+            printf("\n--- CONTENT ---\n%s\n--- END OF CONTENT ---\n", body);
+        } else {
+            printf("\nNo body content available\n");
+            if (hasError()) {
+                printf("Error: %s\n", getLastError());
+            }
+        }
     } else {
         printf("\nNot fetching body as status is not 20 (Success)\n");
     }
 
     // Clean up
+    destroyResponse(response);
     destroyClient(client);
     printf("\nConnection closed\n");
 
