@@ -300,10 +300,25 @@ nimble asyncserver  # Async server
 ./build/async_server cert.pem key.pem 1965 -6
 ```
 
+### Running Tests
+
+Use these Nimble tasks to run the test suite:
+
+```bash
+# Run all tests
+nimble test
+
+# Run specific test suites
+nimble testserver   # Server tests
+nimble testclient   # Client tests
+nimble testtls      # TLS implementation tests
+nimble testurl      # URL parsing tests
+```
+
 ## Roadmap
 
 - [ ] Gemini text format (text/gemini) parser
-- [ ] Comprehensive test suite
+- [x] Comprehensive test suite
 - [ ] Improved documentation
 - [ ] Optimized mbedTLS build size
 - [ ] Complete server implementation

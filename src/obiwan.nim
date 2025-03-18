@@ -10,6 +10,7 @@ import uri
 import streams
 import net
 import posix
+import os  # For fileExists
 
 # Core components
 import obiwan/common
@@ -20,39 +21,8 @@ import obiwan/tls/mbedtls as mbedtls
 import obiwan/tls/socket as tlsSocket
 import obiwan/tls/async_socket as tlsAsyncSocket
 
-# Only declare the platform-specific version we need
-when defined(isMacOS):
-  # Function for macOS - use our custom define
-  proc parseKeyFile*(ctx: ptr tlsSocket.MbedtlsSslContext; keyFile: string): cint =
-    ## Parses a private key file in PEM format (macOS-specific implementation).
-    ##
-    ## This function handles the platform-specific requirements for macOS,
-    ## which needs additional parameters for the random number generator.
-    ##
-    ## Parameters:
-    ##   ctx: Pointer to the mbedTLS SSL context
-    ##   keyFile: Path to the private key file in PEM format
-    ##
-    ## Returns:
-    ##   0 on success, or a negative mbedTLS error code on failure
-    # macOS requires 5 parameters
-    mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil, mbedtls.mbedtls_ctr_drbg_random, addr ctx.ctr_drbg)
-else:
-  # Function for Linux and other platforms
-  proc parseKeyFile*(ctx: ptr tlsSocket.MbedtlsSslContext; keyFile: string): cint =
-    ## Parses a private key file in PEM format (Linux/other platform implementation).
-    ##
-    ## This function handles the platform-specific requirements for Linux and
-    ## other platforms that don't need additional random number generator parameters.
-    ##
-    ## Parameters:
-    ##   ctx: Pointer to the mbedTLS SSL context
-    ##   keyFile: Path to the private key file in PEM format
-    ##
-    ## Returns:
-    ##   0 on success, or a negative mbedTLS error code on failure
-    # Linux only requires 3 parameters
-    mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil)
+# Note: We've moved the platform-specific key file parsing directly into the
+# loadIdentityFile function for better clarity and to avoid pointer manipulation issues.
 
 # Concrete type aliases for TLS implementation
 type
@@ -152,24 +122,76 @@ proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile, keyFi
   ## Raises:
   ##   No exceptions are raised; errors are reported via the return value.
   # Use the context directly as MbedtlsSslContext
-  let ctx = MbedtlsSslContext(client.sslContext)
+  let ctx = cast[MbedtlsSslContext](client.sslContext)
 
+  debug("Loading client certificate from: " & certFile)
+  
+  # Make sure the certificates exist
+  if not fileExists(certFile):
+    error("Certificate file not found: " & certFile)
+    return false
+    
+  if not fileExists(keyFile):
+    error("Key file not found: " & keyFile)
+    return false
+
+  # Initialize SSL config (should be done already, but let's make sure)
+  debug("Making sure SSL config is properly initialized")
+  
+  # Configure auth mode first - in mbedTLS this needs to be done before cert setup
+  debug("Setting auth mode to MBEDTLS_SSL_VERIFY_OPTIONAL")
+  mbedtls.mbedtls_ssl_conf_authmode(addr ctx.config, mbedtls.MBEDTLS_SSL_VERIFY_OPTIONAL)
+  
+  # Parse the certificate - direct approach, avoiding pointer manipulation
+  debug("Parsing certificate file: " & certFile)
   let ret1 = mbedtls.mbedtls_x509_crt_parse_file(addr ctx.cert, certFile)
   if ret1 != 0:
+    # Get a more detailed error message
+    var errorStr = newString(100)
+    mbedtls.mbedtls_strerror(ret1, cast[cstring](addr errorStr[0]), 100)
+    error("Failed to parse certificate file: " & errorStr & " (code: " & $ret1 & ")")
     return false
+  
+  debug("Certificate parsed successfully")
 
-  # Use unified function
-  let ret2 = parseKeyFile(unsafeAddr ctx, keyFile)
+  # Parse the key - direct approach
+  debug("Loading private key from: " & keyFile)
+  
+  # Use unified function for platform-specific key file parsing
+  let ret2 = 
+    when defined(isMacOS):
+      # macOS requires 5 parameters
+      mbedtls.mbedtls_pk_parse_keyfile(
+        addr ctx.key, keyFile, nil, 
+        mbedtls.mbedtls_ctr_drbg_random, addr ctx.ctr_drbg)
+    else:
+      # Linux only requires 3 parameters
+      mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil)
+    
   if ret2 != 0:
+    # Get a more detailed error message
+    var errorStr = newString(100)
+    mbedtls.mbedtls_strerror(ret2, cast[cstring](addr errorStr[0]), 100)
+    error("Failed to parse key file: " & errorStr & " (code: " & $ret2 & ")")
     return false
+    
+  debug("Private key parsed successfully")
 
   # Configure certificate in SSL context
+  debug("Setting up client certificate for SSL/TLS with mbedtls_ssl_conf_own_cert")
   let ret3 = mbedtls.mbedtls_ssl_conf_own_cert(addr ctx.config,
                                           addr ctx.cert,
                                           addr ctx.key)
   if ret3 != 0:
+    # Get a more detailed error message
+    var errorStr = newString(100)
+    mbedtls.mbedtls_strerror(ret3, cast[cstring](addr errorStr[0]), 100)
+    error("Failed to configure client certificate: " & errorStr & " (code: " & $ret3 & ")")
     return false
-
+  
+  # Double-check client certificate configuration
+  debug("Client certificate configuration complete")
+  debug("Client certificate should now be ready for TLS handshake")
   return true
 
 
@@ -222,9 +244,18 @@ proc newObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): ObiwanClie
   # This allows connecting to servers with self-signed certificates, which are common in Gemini
   mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config, mbedtls.MBEDTLS_SSL_VERIFY_NONE)
 
-  if certFile != "" and keyFile != "":
+  # Load client certificate if provided
+  if certFile != "" or keyFile != "":
+    # Both must be provided or neither
+    if certFile == "":
+      raise newException(ObiwanError, "Key file provided without certificate file")
+    if keyFile == "":
+      raise newException(ObiwanError, "Certificate file provided without key file")
+      
+    debug("Loading client identity from certificate: " & certFile & " and key: " & keyFile)
     if not result.loadIdentityFile(certFile, keyFile):
-      raise newException(ObiwanError, "Failed to load certificate files.")
+      error("Failed to load client certificate files")
+      raise newException(ObiwanError, "Failed to load client certificate files")
 
 proc newAsyncObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): AsyncObiwanClient =
   ## Creates a new asynchronous Gemini protocol client.
@@ -278,9 +309,18 @@ proc newAsyncObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): Async
   # This allows connecting to servers with self-signed certificates, which are common in Gemini
   mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config, mbedtls.MBEDTLS_SSL_VERIFY_NONE)
 
-  if certFile != "" and keyFile != "":
+  # Load client certificate if provided
+  if certFile != "" or keyFile != "":
+    # Both must be provided or neither
+    if certFile == "":
+      raise newException(ObiwanError, "Key file provided without certificate file")
+    if keyFile == "":
+      raise newException(ObiwanError, "Certificate file provided without key file")
+      
+    debug("Loading client identity from certificate: " & certFile & " and key: " & keyFile)
     if not result.loadIdentityFile(certFile, keyFile):
-      raise newException(ObiwanError, "Failed to load certificate files.")
+      error("Failed to load client certificate files")
+      raise newException(ObiwanError, "Failed to load client certificate files")
 
 proc loadUrl(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Response | AsyncResponse] {.multisync.} =
   ## Internal helper function to load a URL
@@ -858,10 +898,24 @@ proc newObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFil
     if ret1 != 0:
       raise newException(ObiwanError, "Failed to parse certificate file")
 
-    # Use unified function with address-of operator
-    let ret2 = parseKeyFile(addr actualContext, keyFile)
+    # Parse the key - platform-specific implementation
+    debug("Loading private key from: " & keyFile)
+    
+    # Use platform-specific key file parsing
+    let ret2 = when defined(isMacOS):
+      # macOS requires 5 parameters
+      mbedtls.mbedtls_pk_parse_keyfile(
+        addr actualContext.key, keyFile, nil, 
+        mbedtls.mbedtls_ctr_drbg_random, addr actualContext.ctr_drbg)
+    else:
+      # Linux only requires 3 parameters
+      mbedtls.mbedtls_pk_parse_keyfile(addr actualContext.key, keyFile, nil)
+        
     if ret2 != 0:
-      raise newException(ObiwanError, "Failed to parse key file")
+      # Get a more detailed error message
+      var errorStr = newString(100)
+      mbedtls.mbedtls_strerror(ret2, cast[cstring](addr errorStr[0]), 100)
+      raise newException(ObiwanError, "Failed to parse key file: " & errorStr & " (code: " & $ret2 & ")")
 
     # Configure certificate in SSL context
     let ret3 = mbedtls.mbedtls_ssl_conf_own_cert(addr actualContext.config,
@@ -937,10 +991,24 @@ proc newAsyncObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", k
     if ret1 != 0:
       raise newException(ObiwanError, "Failed to parse certificate file")
 
-    # Use unified function with address-of operator
-    let ret2 = parseKeyFile(addr actualContext, keyFile)
+    # Parse the key - platform-specific implementation
+    debug("Loading private key from: " & keyFile)
+    
+    # Use platform-specific key file parsing
+    let ret2 = when defined(isMacOS):
+      # macOS requires 5 parameters
+      mbedtls.mbedtls_pk_parse_keyfile(
+        addr actualContext.key, keyFile, nil, 
+        mbedtls.mbedtls_ctr_drbg_random, addr actualContext.ctr_drbg)
+    else:
+      # Linux only requires 3 parameters
+      mbedtls.mbedtls_pk_parse_keyfile(addr actualContext.key, keyFile, nil)
+        
     if ret2 != 0:
-      raise newException(ObiwanError, "Failed to parse key file")
+      # Get a more detailed error message
+      var errorStr = newString(100)
+      mbedtls.mbedtls_strerror(ret2, cast[cstring](addr errorStr[0]), 100)
+      raise newException(ObiwanError, "Failed to parse key file: " & errorStr & " (code: " & $ret2 & ")")
 
     # Configure certificate in SSL context
     let ret3 = mbedtls.mbedtls_ssl_conf_own_cert(addr actualContext.config,

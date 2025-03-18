@@ -341,14 +341,38 @@ proc my_bio_send(ctx: pointer, buf: pointer, len: csize_t): cint {.cdecl.} =
 
     # Show a few bytes of the buffer for debugging
     withDebug:
-      var debugBytes = ""
+      var debugStr = ""
+      var debugHex = ""
       for i in 0..<min(len.int, 40):
         let b = cast[ptr uint8](cast[int](buf) + i)[]
+        debugHex.add(" " & toHex(b.int, 2))
         if b >= 32 and b < 127:  # Only print ASCII chars
-          debugBytes.add(b.char)
+          debugStr.add(b.char)
         else:
-          debugBytes.add('.')
-      debug("[BIO_SEND] Data (first 40 bytes): " & debugBytes)
+          debugStr.add('.')
+      
+      # See if this is a client certificate message by looking for patterns in the bytes
+      if len > 10:
+        let recordType = cast[ptr uint8](buf)[]
+        let isCertMsg = recordType == 0x16  # 0x16 is handshake record type
+        
+        # Check if it might be a certificate message by looking for patterns
+        if isCertMsg:
+          debug("[BIO_SEND] Looks like a TLS handshake message (0x16)")
+          # Look for signs of client certificate
+          # Record type (1) + version (2) + length (2) + handshake type (1) = 6 bytes offset
+          if len > 6:
+            let handshakeType = cast[ptr uint8](cast[int](buf) + 5)[]
+            debug("[BIO_SEND] Handshake message type: 0x" & toHex(handshakeType.int, 2))
+            # Type 11 (0x0B) is certificate
+            if handshakeType == 0x0B:
+              debug("[BIO_SEND] This appears to be a Certificate message - likely client certificate being sent")
+            # Type 15 (0x0F) is certificate verify
+            elif handshakeType == 0x0F:
+              debug("[BIO_SEND] This appears to be a CertificateVerify message - client certificate verification")
+      
+      debug("[BIO_SEND] Data hex (first 40 bytes): " & debugHex)
+      debug("[BIO_SEND] Data str (first 40 bytes): " & debugStr)
 
     # Try to write to the socket
     debug("[BIO_SEND] Calling posix.write with fd=" & $sock.fd & " and len=" & $len.int)
@@ -405,14 +429,41 @@ proc my_bio_recv(ctx: pointer, buf: pointer, len: csize_t): cint {.cdecl.} =
     # Show data received for debugging
     if ret > 0:
       withDebug:
-        var debugBytes = ""
+        var debugStr = ""
+        var debugHex = ""
         for i in 0..<min(ret.int, 40):
           let b = cast[ptr uint8](cast[int](buf) + i)[]
+          debugHex.add(" " & toHex(b.int, 2))
           if b >= 32 and b < 127:  # Only print ASCII printable chars
-            debugBytes.add(b.char)
+            debugStr.add(b.char)
           else:
-            debugBytes.add('.')
-        debug("[BIO_RECV] Received data (first 40 bytes): " & debugBytes)
+            debugStr.add('.')
+            
+        # See if this is a client certificate request message by looking for patterns in the bytes
+        if ret > 10:
+          let recordType = cast[ptr uint8](buf)[]
+          let isCertMsg = recordType == 0x16  # 0x16 is handshake record type
+          
+          # Check if it might be a certificate message by looking for patterns
+          if isCertMsg:
+            debug("[BIO_RECV] Looks like a TLS handshake message (0x16)")
+            # Look for signs of client certificate
+            # Record type (1) + version (2) + length (2) + handshake type (1) = 6 bytes offset
+            if ret > 6:
+              let handshakeType = cast[ptr uint8](cast[int](buf) + 5)[]
+              debug("[BIO_RECV] Handshake message type: 0x" & toHex(handshakeType.int, 2))
+              # Type 13 (0x0D) is certificate request
+              if handshakeType == 0x0D:
+                debug("[BIO_RECV] This appears to be a CertificateRequest message - server requesting client certificate")
+              # Type 22 (0x16) is client certificate message
+              elif handshakeType == 0x16:
+                debug("[BIO_RECV] This appears to be a client certificate message")
+              # Type 11 (0x0B) is certificate
+              elif handshakeType == 0x0B:
+                debug("[BIO_RECV] This appears to be a Certificate message (possibly server certificate)")
+        
+        debug("[BIO_RECV] Data hex (first 40 bytes): " & debugHex)
+        debug("[BIO_RECV] Data str (first 40 bytes): " & debugStr)
 
     if ret < 0:
       let err = posix.errno
@@ -527,20 +578,107 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: MbedtlsSocket,
 
 proc handshakeAsClient*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
   debug("Performing client handshake...")
+  
+  # We can't directly access the client certificate in mbedTLS, but we can log what we know
+  debug("Client certificate may be configured if provided during client creation")
+  
+  # Perform the handshake
+  debug("Starting SSL/TLS handshake...")
   let ret = mbedtls.mbedtls_ssl_handshake(sslCtx)
+  
   if ret != 0:
-    debug("Client handshake returned error: " & $ret)
+    # Get a more detailed error message
+    var errorStr = newString(100)
+    mbedtls.mbedtls_strerror(ret, cast[cstring](addr errorStr[0]), 100)
+    debug("CLIENT HANDSHAKE ERROR: " & $ret & " - " & errorStr)
+    
+    # Check for specific error conditions
+    if ret == mbedtls.MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
+      debug("Certificate verification failed - this is normal for self-signed certs")
+      
+      # Get verification flags to see specific issues
+      let verifyResult = mbedtls.mbedtls_ssl_get_verify_result(sslCtx)
+      debug("Verification result flags: 0x" & toHex(verifyResult))
+    elif ret == mbedtls.MBEDTLS_ERR_SSL_WANT_READ or ret == mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
+      debug("Handshake needs more data - would block")
+    else:
+      debug("Unknown handshake error code: " & $ret)
+      
+      # Try checking BIO errors
+      debug("Checking if this might be a BIO or socket error...")
   else:
     debug("Client handshake successful")
+    
+    # Check if client certificate was sent
+    debug("Checking if our client certificate was included in the handshake...")
+    # We can't directly check if client certificate was requested in older mbedTLS
+    # For now, we'll just log that we completed the handshake
+    debug("Handshake completed - if client certificate was required, it was accepted")
+  
   return ret
 
 proc handshakeAsServer*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
   debug("Performing server handshake...")
+  
+  # Set up the auth mode - needed for client certificate handling
+  # Using MBEDTLS_SSL_VERIFY_OPTIONAL allows clients to connect with or without a certificate
+  # We don't want to force all clients to have certificates by default
+  debug("Server is using MBEDTLS_SSL_VERIFY_OPTIONAL auth mode")
+  
+  # Perform the actual handshake
   let ret = mbedtls.mbedtls_ssl_handshake(sslCtx)
+  
   if ret != 0:
-    debug("Server handshake returned error: " & $ret)
+    # Get a more detailed error message
+    var errorStr = newString(100)
+    mbedtls.mbedtls_strerror(ret, cast[cstring](addr errorStr[0]), 100)
+    debug("SERVER HANDSHAKE ERROR: " & $ret & " - " & errorStr)
+    
+    # Check for specific error conditions
+    if ret == mbedtls.MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
+      debug("Client certificate verification failed")
+      
+      # Get verification flags to see specific issues
+      let verifyResult = mbedtls.mbedtls_ssl_get_verify_result(sslCtx)
+      debug("Client certificate verification result flags: 0x" & toHex(verifyResult))
+    elif ret == mbedtls.MBEDTLS_ERR_SSL_WANT_READ or ret == mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
+      debug("Handshake needs more data - would block")
+    else:
+      debug("Unknown handshake error code: " & $ret)
+      
+      # Check if this might be related to client certificate issues
+      debug("Checking if this might be a client certificate related error...")
   else:
     debug("Server handshake successful")
+    
+    # Check if client certificate was received
+    let clientCert = mbedtls.mbedtls_ssl_get_peer_cert(sslCtx)
+    if clientCert.isNil:
+      debug("No client certificate was provided during handshake")
+    else:
+      debug("Client certificate was successfully provided during handshake")
+      # Get basic info about the certificate
+      var subjectBuf = newString(256)
+      let nameLen = mbedtls.mbedtls_x509_dn_gets(subjectBuf.cstring, 256.csize_t, 
+                                                cast[pointer](clientCert))
+      if nameLen > 0:
+        debug("Client certificate subject: " & subjectBuf[0..<nameLen])
+      else:
+        debug("Could not extract certificate subject")
+      
+      # Get verification result
+      let verifyResult = mbedtls.mbedtls_ssl_get_verify_result(sslCtx)
+      debug("Client certificate verification result: 0x" & toHex(verifyResult))
+      
+      # Check verification result interpretation
+      if verifyResult == 0:
+        debug("Client certificate verified successfully against trusted roots")
+      elif (verifyResult and 0x01) != 0:
+        debug("Certificate not trusted (possibly self-signed)")
+      
+      # Additional debugging
+      debug("Client certificate successfully processed by server!")
+  
   return ret
 
 # Socket creation and connection functions
