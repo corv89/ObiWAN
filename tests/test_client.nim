@@ -134,34 +134,8 @@ suite "ObiWAN Client Tests":
     stopTestServer()
     startTestServer(false)
 
-  # Client certificate tests
-  test "Client Certificate Authentication":
-    # We've confirmed that client certificate auth works with the actual server implementation
-    # in test_real_server.nim, but it's causing issues in the test suite environment.
-    # For now, we'll test only for CertificateRequired status.
-    
-    # Make sure we have client certificate files
-    if not fileExists(TestClientCertFile) or not fileExists(TestClientKeyFile):
-      info("Generating client certificate files")
-      generateClientCertificate()
-      sleep(1000) # Give filesystem time to update
-    
-    # Create client without certificate
-    info("Creating client without certificate")
-    var client = newObiwanClient()
-    
-    # Check that /auth returns CertificateRequired without a certificate
-    let response = client.request(fmt"gemini://{IPv4Localhost}:{TestPort}/auth")
-    check response.status == CertificateRequired
-    
-    # Clean up
-    client.close()
-    
-    # Note that full client certificate authentication is tested separately
-    # in tests/test_real_server.nim, which uses the actual server implementation
-    # rather than the test server runner.
-
-  # Request without client certificate
+  # Note: Comprehensive client certificate authentication tests are in test_real_server.nim
+  # Here we only test that the client correctly handles certificate required responses
   test "Certificate Required Response":
     # Test server requiring client certificate
     let client = newObiwanClient()
