@@ -21,6 +21,14 @@ type
 # These are defined in the mbedTLS headers
 {.pragma: mbedtlsConstants, importc, nodecl.}
 
+# TLS version constants
+type
+  TlsVersion* = enum
+    TLS_V10 = 0x0301  # TLS 1.0 (not recommended)
+    TLS_V11 = 0x0302  # TLS 1.1 (not recommended)
+    TLS_V12 = 0x0303  # TLS 1.2 (minimum recommended)
+    TLS_V13 = 0x0304  # TLS 1.3 (preferred)
+
 var
   MBEDTLS_SSL_IS_CLIENT* {.mbedtlsConstants, header: "<mbedtls/ssl.h>".}: cint
   MBEDTLS_SSL_IS_SERVER* {.mbedtlsConstants, header: "<mbedtls/ssl.h>".}: cint
