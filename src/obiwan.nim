@@ -10,7 +10,7 @@ import uri
 import streams
 import net
 import posix
-import os  # For fileExists
+import os # For fileExists
 
 # Core components
 import obiwan/common
@@ -29,27 +29,27 @@ type
   ## Certificate and error types
   X509Certificate* = tlsSocket.X509Certificate
     ## X.509 certificate type for TLS encryption and authentication.
-  
+
   MbedtlsError* = tlsSocket.MbedtlsError
     ## mbedTLS-specific error type.
 
   ## Socket implementation types
   MbedtlsSocket* = tlsSocket.MbedtlsSocket
     ## Synchronous TLS socket implementation using mbedTLS.
-  
+
   MbedtlsSocketObj* = tlsSocket.MbedtlsSocketObj
     ## Concrete object type for synchronous TLS sockets.
-  
+
   MbedtlsAsyncSocket* = tlsAsyncSocket.MbedtlsAsyncSocket
     ## Asynchronous TLS socket implementation using mbedTLS.
-  
+
   MbedtlsAsyncSocketObj* = tlsAsyncSocket.MbedtlsAsyncSocketObj
     ## Concrete object type for asynchronous TLS sockets.
 
   ## TLS context types
   MbedtlsSslContext* = tlsSocket.MbedtlsSslContext
     ## Concrete SSL/TLS context implementation using mbedTLS.
-  
+
   SslContext* = tlsSocket.BaseSslContext
     ## Base SSL/TLS context type for both synchronous and asynchronous operations.
 
@@ -57,7 +57,7 @@ type
   ObiwanClient* = ObiwanClientBase[MbedtlsSocket]
     ## Synchronous Gemini protocol client.
     ## Use this type for blocking, synchronous operations.
-  
+
   AsyncObiwanClient* = ObiwanClientBase[MbedtlsAsyncSocket]
     ## Asynchronous Gemini protocol client.
     ## Use this type for non-blocking, asynchronous operations.
@@ -66,7 +66,7 @@ type
   Response* = ResponseBase[ObiwanClient]
     ## Synchronous response from a Gemini server.
     ## Contains status, meta information, and certificate details.
-  
+
   AsyncResponse* = ResponseBase[AsyncObiwanClient]
     ## Asynchronous response from a Gemini server.
     ## Contains status, meta information, and certificate details.
@@ -75,7 +75,7 @@ type
   ObiwanServer* = ObiwanServerBase[MbedtlsSocket]
     ## Synchronous Gemini protocol server.
     ## Use this type for blocking, synchronous server implementations.
-  
+
   AsyncObiwanServer* = ObiwanServerBase[MbedtlsAsyncSocket]
     ## Asynchronous Gemini protocol server.
     ## Use this type for non-blocking, asynchronous server implementations.
@@ -84,7 +84,7 @@ type
   Request* = RequestBase[MbedtlsSocket]
     ## Synchronous request received by a Gemini server.
     ## Contains URL, client certificate, and verification information.
-  
+
   AsyncRequest* = RequestBase[MbedtlsAsyncSocket]
     ## Asynchronous request received by a Gemini server.
     ## Contains URL, client certificate, and verification information.
@@ -104,7 +104,8 @@ export debug.debug, debug.debugf, debug.withDebug, debug.debugEnabled
 # Certificate handling is available through the tlsSocket module
 
 # Client API
-proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile, keyFile: string): bool =
+proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile,
+    keyFile: string): bool =
   ## Loads a client certificate and private key from PEM files for client authentication.
   ##
   ## This allows the client to offer a certificate to the server when connecting, which
@@ -125,23 +126,24 @@ proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile, keyFi
   let ctx = cast[MbedtlsSslContext](client.sslContext)
 
   debug("Loading client certificate from: " & certFile)
-  
+
   # Make sure the certificates exist
   if not fileExists(certFile):
     error("Certificate file not found: " & certFile)
     return false
-    
+
   if not fileExists(keyFile):
     error("Key file not found: " & keyFile)
     return false
 
   # Initialize SSL config (should be done already, but let's make sure)
   debug("Making sure SSL config is properly initialized")
-  
+
   # Configure auth mode first - in mbedTLS this needs to be done before cert setup
   debug("Setting auth mode to MBEDTLS_SSL_VERIFY_OPTIONAL")
-  mbedtls.mbedtls_ssl_conf_authmode(addr ctx.config, mbedtls.MBEDTLS_SSL_VERIFY_OPTIONAL)
-  
+  mbedtls.mbedtls_ssl_conf_authmode(addr ctx.config,
+      mbedtls.MBEDTLS_SSL_VERIFY_OPTIONAL)
+
   # Parse the certificate - direct approach, avoiding pointer manipulation
   debug("Parsing certificate file: " & certFile)
   let ret1 = mbedtls.mbedtls_x509_crt_parse_file(addr ctx.cert, certFile)
@@ -151,30 +153,30 @@ proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile, keyFi
     mbedtls.mbedtls_strerror(ret1, cast[cstring](addr errorStr[0]), 100)
     error("Failed to parse certificate file: " & errorStr & " (code: " & $ret1 & ")")
     return false
-  
+
   debug("Certificate parsed successfully")
 
   # Parse the key - direct approach
   debug("Loading private key from: " & keyFile)
-  
+
   # Use unified function for platform-specific key file parsing
-  let ret2 = 
+  let ret2 =
     when defined(isMacOS):
       # macOS requires 5 parameters
       mbedtls.mbedtls_pk_parse_keyfile(
-        addr ctx.key, keyFile, nil, 
+        addr ctx.key, keyFile, nil,
         mbedtls.mbedtls_ctr_drbg_random, addr ctx.ctr_drbg)
     else:
       # Linux only requires 3 parameters
       mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil)
-    
+
   if ret2 != 0:
     # Get a more detailed error message
     var errorStr = newString(100)
     mbedtls.mbedtls_strerror(ret2, cast[cstring](addr errorStr[0]), 100)
     error("Failed to parse key file: " & errorStr & " (code: " & $ret2 & ")")
     return false
-    
+
   debug("Private key parsed successfully")
 
   # Configure certificate in SSL context
@@ -186,16 +188,18 @@ proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile, keyFi
     # Get a more detailed error message
     var errorStr = newString(100)
     mbedtls.mbedtls_strerror(ret3, cast[cstring](addr errorStr[0]), 100)
-    error("Failed to configure client certificate: " & errorStr & " (code: " & $ret3 & ")")
+    error("Failed to configure client certificate: " & errorStr & " (code: " &
+        $ret3 & ")")
     return false
-  
+
   # Double-check client certificate configuration
   debug("Client certificate configuration complete")
   debug("Client certificate should now be ready for TLS handshake")
   return true
 
 
-proc newObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): ObiwanClient =
+proc newObiwanClient*(maxRedirects = 5; certFile = "";
+    keyFile = ""): ObiwanClient =
   ## Creates a new synchronous Gemini protocol client.
   ##
   ## This function creates a synchronous client for making Gemini protocol requests.
@@ -242,7 +246,8 @@ proc newObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): ObiwanClie
 
   # For Gemini, set auth mode to none to skip certificate validation
   # This allows connecting to servers with self-signed certificates, which are common in Gemini
-  mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config, mbedtls.MBEDTLS_SSL_VERIFY_NONE)
+  mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config,
+      mbedtls.MBEDTLS_SSL_VERIFY_NONE)
 
   # Load client certificate if provided
   if certFile != "" or keyFile != "":
@@ -251,13 +256,15 @@ proc newObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): ObiwanClie
       raise newException(ObiwanError, "Key file provided without certificate file")
     if keyFile == "":
       raise newException(ObiwanError, "Certificate file provided without key file")
-      
-    debug("Loading client identity from certificate: " & certFile & " and key: " & keyFile)
+
+    debug("Loading client identity from certificate: " & certFile &
+        " and key: " & keyFile)
     if not result.loadIdentityFile(certFile, keyFile):
       error("Failed to load client certificate files")
       raise newException(ObiwanError, "Failed to load client certificate files")
 
-proc newAsyncObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): AsyncObiwanClient =
+proc newAsyncObiwanClient*(maxRedirects = 5; certFile = "";
+    keyFile = ""): AsyncObiwanClient =
   ## Creates a new asynchronous Gemini protocol client.
   ##
   ## This function creates an asynchronous client for making non-blocking Gemini protocol
@@ -283,7 +290,7 @@ proc newAsyncObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): Async
   ##     if response.status == Status.Success:
   ##       let content = await response.body()
   ##       echo content
-  ##   
+  ##
   ##   waitFor main()
   ##   ```
   result = AsyncObiwanClient(maxRedirects: maxRedirects)
@@ -307,7 +314,8 @@ proc newAsyncObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): Async
 
   # For Gemini, set auth mode to none to skip certificate validation
   # This allows connecting to servers with self-signed certificates, which are common in Gemini
-  mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config, mbedtls.MBEDTLS_SSL_VERIFY_NONE)
+  mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config,
+      mbedtls.MBEDTLS_SSL_VERIFY_NONE)
 
   # Load client certificate if provided
   if certFile != "" or keyFile != "":
@@ -316,13 +324,15 @@ proc newAsyncObiwanClient*(maxRedirects = 5, certFile = "", keyFile = ""): Async
       raise newException(ObiwanError, "Key file provided without certificate file")
     if keyFile == "":
       raise newException(ObiwanError, "Certificate file provided without key file")
-      
-    debug("Loading client identity from certificate: " & certFile & " and key: " & keyFile)
+
+    debug("Loading client identity from certificate: " & certFile &
+        " and key: " & keyFile)
     if not result.loadIdentityFile(certFile, keyFile):
       error("Failed to load client certificate files")
       raise newException(ObiwanError, "Failed to load client certificate files")
 
-proc loadUrl(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Response | AsyncResponse] {.multisync.} =
+proc loadUrl(client: ObiwanClient | AsyncObiwanClient; url: string): Future[
+    Response | AsyncResponse] {.multisync.} =
   ## Internal helper function to load a URL
   let uri = parseUri(url)
   let port = if uri.port == "": 1965 else: parseInt(uri.port)
@@ -335,13 +345,15 @@ proc loadUrl(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Resp
   when client is AsyncObiwanClient:
     result = AsyncResponse(client: client)
     client.socket = await tlsAsyncSocket.dial(uri.hostname, port)
-    await tlsAsyncSocket.wrapConnectedSocket(ctx, client.socket, tlsAsyncSocket.handshakeAsClient, uri.hostname)
+    await tlsAsyncSocket.wrapConnectedSocket(ctx, client.socket,
+        tlsAsyncSocket.handshakeAsClient, uri.hostname)
     # send data now to force TLS handshake to complete
     await client.socket.send(url & "\r\n")
   else:
     result = Response(client: client)
     client.socket = tlsSocket.dial(uri.hostname, port)
-    tlsSocket.wrapConnectedSocket(ctx, client.socket, tlsSocket.handshakeAsClient, uri.hostname)
+    tlsSocket.wrapConnectedSocket(ctx, client.socket,
+        tlsSocket.handshakeAsClient, uri.hostname)
     # send data now to force TLS handshake to complete
     discard client.socket.send(url & "\r\n")
 
@@ -359,7 +371,8 @@ proc loadUrl(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Resp
   if result.status.int >= 30:
     client.socket.close()
 
-proc request*(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Response | AsyncResponse] {.multisync.} =
+proc request*(client: ObiwanClient | AsyncObiwanClient; url: string): Future[
+    Response | AsyncResponse] {.multisync.} =
   ## Makes a Gemini protocol request to the specified URL and returns the response.
   ##
   ## This function handles the entire request process, including:
@@ -388,7 +401,7 @@ proc request*(client: ObiwanClient | AsyncObiwanClient, url: string): Future[Res
   ##   # Synchronous example
   ##   let client = newObiwanClient()
   ##   let response = client.request("gemini://example.com/")
-  ##   
+  ##
   ##   # Asynchronous example
   ##   let client = newAsyncObiwanClient()
   ##   let response = await client.request("gemini://example.com/")
@@ -432,7 +445,7 @@ proc body*(response: Response | AsyncResponse): Future[string] {.multisync.} =
   ##   if response.status == Status.Success:
   ##     let content = response.body()
   ##     echo content
-  ##   
+  ##
   ##   # Asynchronous example
   ##   let response = await client.request("gemini://example.com/")
   ##   if response.status == Status.Success:
@@ -486,7 +499,8 @@ proc close*(client: ObiwanClient | AsyncObiwanClient) =
     client.socket.close()
 
 # Server API
-proc respond*(req: Request | AsyncRequest, status: Status, meta: string, body: string = "") {.multisync.} =
+proc respond*(req: Request | AsyncRequest; status: Status; meta: string;
+    body: string = "") {.multisync.} =
   ## Sends a response to a client according to the Gemini protocol specification.
   ##
   ## This function constructs and sends a properly formatted Gemini response, consisting of:
@@ -515,10 +529,10 @@ proc respond*(req: Request | AsyncRequest, status: Status, meta: string, body: s
   ##   ```nim
   ##   # Success response with content
   ##   req.respond(Status.Success, "text/gemini", "# Welcome to my Gemini server\n\nHello world!")
-  ##   
+  ##
   ##   # Not found error
   ##   req.respond(Status.NotFound, "Resource not available")
-  ##   
+  ##
   ##   # Redirect
   ##   req.respond(Status.Redirect, "gemini://example.com/new-location")
   ##   ```
@@ -540,7 +554,8 @@ proc respond*(req: Request | AsyncRequest, status: Status, meta: string, body: s
       discard req.client.send($Status.Error.int & " INTERNAL ERROR\r\n")
 
 # Method to accept connections for synchronous server
-proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), address = "") =
+proc serve*(server: ObiwanServer; port: int; callback: proc(request: Request);
+    address = "") =
   ## Starts a synchronous Gemini protocol server on the specified port.
   ##
   ## This function starts a server that listens for incoming Gemini protocol requests.
@@ -565,7 +580,7 @@ proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), a
   ##   ```nim
   ##   proc handleRequest(req: Request) =
   ##     req.respond(Status.Success, "text/gemini", "# Hello from my Gemini server!")
-  ##   
+  ##
   ##   let server = newObiwanServer(certFile="server.crt", keyFile="server.key")
   ##   server.serve(1965, handleRequest)
   ##   ```
@@ -577,11 +592,11 @@ proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), a
 
   # Determine whether we're using IPv6
   let useIPv6 = address == "::" or (address.contains('[') or address.count(':') > 1)
-  
+
   # Bind to address and port
-  let bindAddr = if address == "": 
+  let bindAddr = if address == "":
                    if useIPv6: "::" else: "0.0.0.0"
-                 else: 
+                 else:
                    address
   var portStr = $port
   debug("Binding to " & bindAddr & ":" & portStr)
@@ -633,7 +648,8 @@ proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), a
 
       # Initialize SSL on the client connection
       debug("Initializing SSL for client connection")
-      tlsSocket.wrapConnectedSocket(ctx, clientSocket, tlsSocket.handshakeAsServer, "")
+      tlsSocket.wrapConnectedSocket(ctx, clientSocket,
+          tlsSocket.handshakeAsServer, "")
 
       # Read the request line
       debug("Reading request line")
@@ -684,11 +700,14 @@ proc serve*(server: ObiwanServer, port: int, callback: proc(request: Request), a
         mbedtls.mbedtls_net_free(addr clientContext)
 
 # Forward declaration
-proc handleAsyncClient(server: AsyncObiwanServer, clientSocket: AsyncSocket,
-                      callback: proc(request: AsyncRequest): Future[void]): Future[void] {.async.}
+proc handleAsyncClient(server: AsyncObiwanServer; clientSocket: AsyncSocket;
+                      callback: proc(request: AsyncRequest): Future[
+                          void]): Future[void] {.async.}
 
 # Method to accept connections for asynchronous server
-proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncRequest): Future[void], address = ""): Future[void] {.async.} =
+proc serve*(server: AsyncObiwanServer; port: int; callback: proc(
+    request: AsyncRequest): Future[void]; address = ""): Future[
+    void] {.async.} =
   ## Starts an asynchronous Gemini protocol server on the specified port.
   ##
   ## This function starts an asynchronous server that listens for incoming Gemini protocol
@@ -713,11 +732,11 @@ proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncR
   ##   ```nim
   ##   proc handleRequest(req: AsyncRequest) {.async.} =
   ##     req.respond(Status.Success, "text/gemini", "# Hello from my async Gemini server!")
-  ##   
+  ##
   ##   proc main() {.async.} =
   ##     let server = newAsyncObiwanServer(certFile="server.crt", keyFile="server.key")
   ##     await server.serve(1965, handleRequest)
-  ##   
+  ##
   ##   waitFor main()
   ##   ```
   debug("Starting asynchronous server on port " & $port)
@@ -733,43 +752,45 @@ proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncR
 
   # Determine whether to use IPv6, and whether to attempt dual-stack mode
   let useIPv6 = address == "::" or (address.contains('[') or address.count(':') > 1)
-  
+
   if useIPv6:
     debug("Creating IPv6 socket")
     # Create IPv6 socket
     serverSocket = newAsyncSocket(Domain.AF_INET6)
-    
+
     # Attempt to disable IPV6_V6ONLY for dual-stack mode
     # This is platform-specific and may not always work
     debug("Trying to enable dual-stack mode (IPv4+IPv6)")
-    
+
     # We'll be more conservative and skip dual-stack configuration
     # This mode is OS-specific anyway, and some systems enable it by default
     # while others don't support it at all
-    # 
-    # Users who need specific socket configurations should use their own 
+    #
+    # Users who need specific socket configurations should use their own
     # socket setup and pass it to the library
-  
+
   # Determine binding address
-  let bindAddr = if address == "" or address == "0.0.0.0": 
+  let bindAddr = if address == "" or address == "0.0.0.0":
                    if useIPv6: "::" else: "0.0.0.0"
-                 else: 
+                 else:
                    address
 
   debug("Binding async server to " & bindAddr & ":" & $port)
   serverSocket.bindAddr(Port(port), bindAddr)
   serverSocket.listen()
-  
+
   # Determine what type of socket we're using for the user message
   let socketTypeMsg = if useIPv6:
     "IPv6" # Simple message - dual-stack support depends on OS configuration
   else:
     "IPv4"
 
-  debug("Server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg)
+  debug("Server listening on " & (if address == "" or address ==
+      "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg)
   # Only show server listening message if verbose level is 1 or higher
   if obiwan.debug.verbosityLevel > 0:
-    echo "Async server listening on " & (if address == "" or address == "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg
+    echo "Async server listening on " & (if address == "" or address ==
+        "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg
 
   # Accept loop
   while true:
@@ -791,8 +812,9 @@ proc serve*(server: AsyncObiwanServer, port: int, callback: proc(request: AsyncR
     asyncCheck handleAsyncClient(server, clientSocket, callback)
 
 # Helper proc to handle async client in a separate task
-proc handleAsyncClient(server: AsyncObiwanServer, clientSocket: AsyncSocket,
-                       callback: proc(request: AsyncRequest): Future[void]): Future[void] {.async.} =
+proc handleAsyncClient(server: AsyncObiwanServer; clientSocket: AsyncSocket;
+                       callback: proc(request: AsyncRequest): Future[
+                           void]): Future[void] {.async.} =
   # Build socket wrapper
   var socket = newMbedtlsAsyncSocket()
   socket.fd = clientSocket.getFd().cint
@@ -805,7 +827,8 @@ proc handleAsyncClient(server: AsyncObiwanServer, clientSocket: AsyncSocket,
 
     # Initialize SSL on the client connection
     debug("Initializing SSL for async client connection")
-    await tlsAsyncSocket.wrapConnectedSocket(ctx, socket, tlsAsyncSocket.handshakeAsServer, "")
+    await tlsAsyncSocket.wrapConnectedSocket(ctx, socket,
+        tlsAsyncSocket.handshakeAsServer, "")
 
     # Read the request line
     debug("Reading async request line")
@@ -854,7 +877,8 @@ proc handleAsyncClient(server: AsyncObiwanServer, clientSocket: AsyncSocket,
     socket.close()
 
 # Server creation
-proc newObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFile = "", sessionId = ""): ObiwanServer =
+proc newObiwanServer*(reuseAddr = true; reusePort = false; certFile = "";
+    keyFile = ""; sessionId = ""): ObiwanServer =
   ## Creates a new synchronous Gemini protocol server.
   ##
   ## This function creates a synchronous server for handling Gemini protocol requests.
@@ -904,22 +928,23 @@ proc newObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFil
 
     # Parse the key - platform-specific implementation
     debug("Loading private key from: " & keyFile)
-    
+
     # Use platform-specific key file parsing
     let ret2 = when defined(isMacOS):
       # macOS requires 5 parameters
       mbedtls.mbedtls_pk_parse_keyfile(
-        addr actualContext.key, keyFile, nil, 
+        addr actualContext.key, keyFile, nil,
         mbedtls.mbedtls_ctr_drbg_random, addr actualContext.ctr_drbg)
     else:
       # Linux only requires 3 parameters
       mbedtls.mbedtls_pk_parse_keyfile(addr actualContext.key, keyFile, nil)
-        
+
     if ret2 != 0:
       # Get a more detailed error message
       var errorStr = newString(100)
       mbedtls.mbedtls_strerror(ret2, cast[cstring](addr errorStr[0]), 100)
-      raise newException(ObiwanError, "Failed to parse key file: " & errorStr & " (code: " & $ret2 & ")")
+      raise newException(ObiwanError, "Failed to parse key file: " & errorStr &
+          " (code: " & $ret2 & ")")
 
     # Configure certificate in SSL context
     let ret3 = mbedtls.mbedtls_ssl_conf_own_cert(addr actualContext.config,
@@ -932,7 +957,8 @@ proc newObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFil
   tlsSocket.setCustomVerify(actualContext)
 
   # Set authentication mode to OPTIONAL - we don't want to require client certificates
-  mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config, mbedtls.MBEDTLS_SSL_VERIFY_OPTIONAL)
+  mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config,
+      mbedtls.MBEDTLS_SSL_VERIFY_OPTIONAL)
 
   # Generate session ID if needed
   var id: string
@@ -947,7 +973,8 @@ proc newObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFil
   # mbedtls doesn't have session ID context in this version, we'll implement it later
   #discard mbedtls.mbedtls_ssl_conf_session_id_context(addr actualContext.config, cast[ptr uint8](id.cstring), id.len.uint)
 
-proc newAsyncObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", keyFile = "", sessionId = ""): AsyncObiwanServer =
+proc newAsyncObiwanServer*(reuseAddr = true; reusePort = false; certFile = "";
+    keyFile = ""; sessionId = ""): AsyncObiwanServer =
   ## Creates a new asynchronous Gemini protocol server.
   ##
   ## This function creates an asynchronous server for handling Gemini protocol requests
@@ -997,22 +1024,23 @@ proc newAsyncObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", k
 
     # Parse the key - platform-specific implementation
     debug("Loading private key from: " & keyFile)
-    
+
     # Use platform-specific key file parsing
     let ret2 = when defined(isMacOS):
       # macOS requires 5 parameters
       mbedtls.mbedtls_pk_parse_keyfile(
-        addr actualContext.key, keyFile, nil, 
+        addr actualContext.key, keyFile, nil,
         mbedtls.mbedtls_ctr_drbg_random, addr actualContext.ctr_drbg)
     else:
       # Linux only requires 3 parameters
       mbedtls.mbedtls_pk_parse_keyfile(addr actualContext.key, keyFile, nil)
-        
+
     if ret2 != 0:
       # Get a more detailed error message
       var errorStr = newString(100)
       mbedtls.mbedtls_strerror(ret2, cast[cstring](addr errorStr[0]), 100)
-      raise newException(ObiwanError, "Failed to parse key file: " & errorStr & " (code: " & $ret2 & ")")
+      raise newException(ObiwanError, "Failed to parse key file: " & errorStr &
+          " (code: " & $ret2 & ")")
 
     # Configure certificate in SSL context
     let ret3 = mbedtls.mbedtls_ssl_conf_own_cert(addr actualContext.config,
@@ -1025,7 +1053,8 @@ proc newAsyncObiwanServer*(reuseAddr = true; reusePort = false, certFile = "", k
   tlsSocket.setCustomVerify(actualContext)
 
   # Set authentication mode to OPTIONAL - we don't want to require client certificates
-  mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config, mbedtls.MBEDTLS_SSL_VERIFY_OPTIONAL)
+  mbedtls.mbedtls_ssl_conf_authmode(addr actualContext.config,
+      mbedtls.MBEDTLS_SSL_VERIFY_OPTIONAL)
 
   # Generate session ID if needed
   var id: string

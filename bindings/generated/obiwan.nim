@@ -63,22 +63,28 @@ proc obiwan_response_unref(x: ResponseObj) {.importc: "obiwan_response_unref", c
 proc `=destroy`(x: var ResponseObj) =
   obiwan_response_unref(x)
 
-proc obiwan_new_obiwan_client(max_redirects: int, cert_file: cstring, key_file: cstring): ObiwanClient {.importc: "obiwan_new_obiwan_client", cdecl.}
+proc obiwan_new_obiwan_client(max_redirects: int, cert_file: cstring,
+    key_file: cstring): ObiwanClient {.importc: "obiwan_new_obiwan_client", cdecl.}
 
-proc newObiwanClient*(maxRedirects: int = 5, certFile: string = "", keyFile: string = ""): ObiwanClient {.inline.} =
-  result = obiwan_new_obiwan_client(maxRedirects, certFile.cstring, keyFile.cstring)
+proc newObiwanClient*(maxRedirects: int = 5, certFile: string = "",
+    keyFile: string = ""): ObiwanClient {.inline.} =
+  result = obiwan_new_obiwan_client(maxRedirects, certFile.cstring,
+      keyFile.cstring)
 
-proc obiwan_obiwan_client_get_max_redirects(obiwanClient: ObiwanClient): Natural {.importc: "obiwan_obiwan_client_get_max_redirects", cdecl.}
+proc obiwan_obiwan_client_get_max_redirects(
+  obiwanClient: ObiwanClient): Natural {.importc: "obiwan_obiwan_client_get_max_redirects", cdecl.}
 
 proc maxRedirects*(obiwanClient: ObiwanClient): Natural {.inline.} =
   obiwan_obiwan_client_get_max_redirects(obiwanClient)
 
-proc obiwan_obiwan_client_set_max_redirects(obiwanClient: ObiwanClient, maxRedirects: Natural) {.importc: "obiwan_obiwan_client_set_max_redirects", cdecl.}
+proc obiwan_obiwan_client_set_max_redirects(obiwanClient: ObiwanClient,
+    maxRedirects: Natural) {.importc: "obiwan_obiwan_client_set_max_redirects", cdecl.}
 
 proc `maxRedirects=`*(obiwanClient: ObiwanClient, maxRedirects: Natural) =
   obiwan_obiwan_client_set_max_redirects(obiwanClient, maxRedirects)
 
-proc obiwan_obiwan_client_request(client: ObiwanClient, url: cstring): Response {.importc: "obiwan_obiwan_client_request", cdecl.}
+proc obiwan_obiwan_client_request(client: ObiwanClient,
+    url: cstring): Response {.importc: "obiwan_obiwan_client_request", cdecl.}
 
 proc request*(client: ObiwanClient, url: string): Response {.inline.} =
   result = obiwan_obiwan_client_request(client, url.cstring)
@@ -88,27 +94,36 @@ proc obiwan_obiwan_client_close(client: ObiwanClient) {.importc: "obiwan_obiwan_
 proc close*(client: ObiwanClient) {.inline.} =
   obiwan_obiwan_client_close(client)
 
-proc obiwan_new_obiwan_server(reuse_addr: bool, reuse_port: bool, cert_file: cstring, key_file: cstring, session_id: cstring): ObiwanServer {.importc: "obiwan_new_obiwan_server", cdecl.}
+proc obiwan_new_obiwan_server(reuse_addr: bool, reuse_port: bool,
+    cert_file: cstring, key_file: cstring,
+    session_id: cstring): ObiwanServer {.importc: "obiwan_new_obiwan_server", cdecl.}
 
-proc newObiwanServer*(reuseAddr: bool = true, reusePort: bool = false, certFile: string = "", keyFile: string = "", sessionId: string = ""): ObiwanServer {.inline.} =
-  result = obiwan_new_obiwan_server(reuseAddr, reusePort, certFile.cstring, keyFile.cstring, sessionId.cstring)
+proc newObiwanServer*(reuseAddr: bool = true, reusePort: bool = false,
+    certFile: string = "", keyFile: string = "",
+    sessionId: string = ""): ObiwanServer {.inline.} =
+  result = obiwan_new_obiwan_server(reuseAddr, reusePort, certFile.cstring,
+      keyFile.cstring, sessionId.cstring)
 
-proc obiwan_obiwan_server_get_reuse_addr(obiwanServer: ObiwanServer): bool {.importc: "obiwan_obiwan_server_get_reuse_addr", cdecl.}
+proc obiwan_obiwan_server_get_reuse_addr(
+  obiwanServer: ObiwanServer): bool {.importc: "obiwan_obiwan_server_get_reuse_addr", cdecl.}
 
 proc reuseAddr*(obiwanServer: ObiwanServer): bool {.inline.} =
   obiwan_obiwan_server_get_reuse_addr(obiwanServer)
 
-proc obiwan_obiwan_server_set_reuse_addr(obiwanServer: ObiwanServer, reuseAddr: bool) {.importc: "obiwan_obiwan_server_set_reuse_addr", cdecl.}
+proc obiwan_obiwan_server_set_reuse_addr(obiwanServer: ObiwanServer,
+    reuseAddr: bool) {.importc: "obiwan_obiwan_server_set_reuse_addr", cdecl.}
 
 proc `reuseAddr=`*(obiwanServer: ObiwanServer, reuseAddr: bool) =
   obiwan_obiwan_server_set_reuse_addr(obiwanServer, reuseAddr)
 
-proc obiwan_obiwan_server_get_reuse_port(obiwanServer: ObiwanServer): bool {.importc: "obiwan_obiwan_server_get_reuse_port", cdecl.}
+proc obiwan_obiwan_server_get_reuse_port(
+  obiwanServer: ObiwanServer): bool {.importc: "obiwan_obiwan_server_get_reuse_port", cdecl.}
 
 proc reusePort*(obiwanServer: ObiwanServer): bool {.inline.} =
   obiwan_obiwan_server_get_reuse_port(obiwanServer)
 
-proc obiwan_obiwan_server_set_reuse_port(obiwanServer: ObiwanServer, reusePort: bool) {.importc: "obiwan_obiwan_server_set_reuse_port", cdecl.}
+proc obiwan_obiwan_server_set_reuse_port(obiwanServer: ObiwanServer,
+    reusePort: bool) {.importc: "obiwan_obiwan_server_set_reuse_port", cdecl.}
 
 proc `reusePort=`*(obiwanServer: ObiwanServer, reusePort: bool) =
   obiwan_obiwan_server_set_reuse_port(obiwanServer, reusePort)
@@ -118,7 +133,8 @@ proc obiwan_response_get_status(response: Response): Status {.importc: "obiwan_r
 proc status*(response: Response): Status {.inline.} =
   obiwan_response_get_status(response)
 
-proc obiwan_response_set_status(response: Response, status: Status) {.importc: "obiwan_response_set_status", cdecl.}
+proc obiwan_response_set_status(response: Response,
+    status: Status) {.importc: "obiwan_response_set_status", cdecl.}
 
 proc `status=`*(response: Response, status: Status) =
   obiwan_response_set_status(response, status)
@@ -128,7 +144,8 @@ proc obiwan_response_get_meta(response: Response): cstring {.importc: "obiwan_re
 proc meta*(response: Response): cstring {.inline.} =
   obiwan_response_get_meta(response).`$`
 
-proc obiwan_response_set_meta(response: Response, meta: cstring) {.importc: "obiwan_response_set_meta", cdecl.}
+proc obiwan_response_set_meta(response: Response,
+    meta: cstring) {.importc: "obiwan_response_set_meta", cdecl.}
 
 proc `meta=`*(response: Response, meta: string) =
   obiwan_response_set_meta(response, meta.cstring)

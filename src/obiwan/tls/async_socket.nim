@@ -53,15 +53,15 @@ type
   ## capabilities, designed for use with Nim's asyncdispatch module.
   ## It provides asynchronous I/O operations for Gemini protocol communication.
   MbedtlsAsyncSocketObj* = object
-    fd*: cint               ## Socket file descriptor
-    domain*: cint           ## Socket domain (AF_INET or AF_INET6)
-    isBuffered*: bool       ## Whether the socket uses buffering
-    buffer*: string         ## Buffer for received data
-    sendQueue*: string      ## Queue for data to be sent
-    isSsl*: bool            ## Whether TLS is enabled
-    sock*: int              ## AsyncFD representation (AsyncFD is an int wrapper)
-    sslContext*: MbedtlsSslContext  ## SSL context for TLS operations
-    sslHandle*: ptr mbedtls.mbedtls_ssl_context  ## Handle to mbedTLS SSL context
+    fd*: cint                                   ## Socket file descriptor
+    domain*: cint                               ## Socket domain (AF_INET or AF_INET6)
+    isBuffered*: bool                           ## Whether the socket uses buffering
+    buffer*: string                             ## Buffer for received data
+    sendQueue*: string                          ## Queue for data to be sent
+    isSsl*: bool                                ## Whether TLS is enabled
+    sock*: int ## AsyncFD representation (AsyncFD is an int wrapper)
+    sslContext*: MbedtlsSslContext              ## SSL context for TLS operations
+    sslHandle*: ptr mbedtls.mbedtls_ssl_context ## Handle to mbedTLS SSL context
 
   ## Reference type for asynchronous TLS socket.
   ##
@@ -86,7 +86,7 @@ proc newMbedtlsAsyncSocket*(): MbedtlsAsyncSocket =
   ## Creates a new asynchronous TLS socket.
   ##
   ## This function initializes a new socket object for asynchronous TLS
-  ## communication. The socket is not yet connected or associated with 
+  ## communication. The socket is not yet connected or associated with
   ## a file descriptor - use the dial() function to establish a connection.
   ##
   ## Returns:
@@ -98,11 +98,11 @@ proc newMbedtlsAsyncSocket*(): MbedtlsAsyncSocket =
   ##   socket = await dial("example.com", 1965)
   ##   ```
   new(result)
-  result.fd = -1            # Invalid FD until connected
-  result.domain = 2         # Domain.AF_INET default
-  result.isBuffered = true  # Enable buffering
-  result.buffer = ""        # Empty buffer
-  result.sendQueue = ""     # Empty send queue
+  result.fd = -1 # Invalid FD until connected
+  result.domain = 2 # Domain.AF_INET default
+  result.isBuffered = true # Enable buffering
+  result.buffer = "" # Empty buffer
+  result.sendQueue = "" # Empty send queue
   result.isSsl = true
   result.sslHandle = nil
   result.sock = -1 # asyncInvalidSocket
@@ -157,11 +157,13 @@ proc dial*(address: string, port: int): Future[MbedtlsAsyncSocket] {.async.} =
 
   # Connect to server
   var portStr = $port
-  let ret = mbedtls.mbedtls_net_connect(addr socketContext, address, cast[cstring](addr portStr[0]), mbedtls.MBEDTLS_NET_PROTO_TCP)
+  let ret = mbedtls.mbedtls_net_connect(addr socketContext, address, cast[
+      cstring](addr portStr[0]), mbedtls.MBEDTLS_NET_PROTO_TCP)
   if ret != 0:
     var errorStr = newString(100)
     mbedtls.mbedtls_strerror(ret, cast[cstring](addr errorStr[0]), 100)
-    raise newException(OSError, "Failed to connect to " & address & ":" & portStr & ": " & errorStr)
+    raise newException(OSError, "Failed to connect to " & address & ":" &
+        portStr & ": " & errorStr)
 
   # Set non-blocking mode
   discard mbedtls.mbedtls_net_set_nonblock(addr socketContext)
@@ -170,7 +172,8 @@ proc dial*(address: string, port: int): Future[MbedtlsAsyncSocket] {.async.} =
   socket.fd = socketContext.fd
   # Detect IPv6 addresses for proper socket domain
   # IPv6 addresses have multiple colons and may be enclosed in square brackets
-  socket.domain = if address.contains('[') or address.count(':') > 1: 10 else: 2 # AF_INET6 = 10, AF_INET = 2
+  socket.domain = if address.contains('[') or address.count(':') >
+      1: 10 else: 2 # AF_INET6 = 10, AF_INET = 2
 
   # Register with async dispatcher
   socket.sock = socket.fd # AsyncFD is just an int wrapper
@@ -179,13 +182,14 @@ proc dial*(address: string, port: int): Future[MbedtlsAsyncSocket] {.async.} =
   return socket
 
 proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyncSocketObj,
-                          handshakeFunc: proc(sslCtx: ptr mbedtls_ssl_context): cint,
+                          handshakeFunc: proc(
+                              sslCtx: ptr mbedtls_ssl_context): cint,
                           hostname: string) {.async.} =
   ## Asynchronously sets up TLS on an existing socket connection and performs handshake.
   ##
   ## This function initializes a TLS session on top of an already connected
   ## socket. It configures the TLS context with the specified hostname for
-  ## SNI (Server Name Indication), sets up the I/O callbacks, and performs 
+  ## SNI (Server Name Indication), sets up the I/O callbacks, and performs
   ## the TLS handshake asynchronously, handling WANT_READ/WANT_WRITE conditions.
   ##
   ## Parameters:
@@ -202,7 +206,7 @@ proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyn
   ##   For self-signed certificates, verification failures with specific error
   ##   codes are accepted to support the Gemini protocol's security model.
   debug("Starting async TLS session setup...")
-  
+
   # Initialize SSL context
   debug("Initializing SSL context")
   mbedtls.mbedtls_ssl_init(addr context.context)
@@ -252,7 +256,8 @@ proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyn
       return mbedtls.MBEDTLS_ERR_NET_RECV_FAILED
 
   # Connect bio with socket
-  mbedtls.mbedtls_ssl_set_bio(addr context.context, cast[pointer](socket), asyncSend, asyncRecv, nil)
+  mbedtls.mbedtls_ssl_set_bio(addr context.context, cast[pointer](socket),
+      asyncSend, asyncRecv, nil)
 
   # Perform SSL handshake (async)
   var handshakeRet = handshakeFunc(addr context.context)
@@ -279,10 +284,11 @@ proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyn
 
 # Convenient wrapper for ref version
 proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: MbedtlsAsyncSocket,
-                         handshakeFunc: proc(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint,
+                         handshakeFunc: proc(
+                             sslCtx: ptr mbedtls.mbedtls_ssl_context): cint,
                          hostname: string) {.async.} =
   await wrapConnectedSocketObj(context, socket, handshakeFunc, hostname)
-  
+
 proc handshakeAsServer*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
   debug("Performing async server handshake...")
   let ret = mbedtls.mbedtls_ssl_handshake(sslCtx)
@@ -305,7 +311,7 @@ proc send*(socket: MbedtlsAsyncSocket, data: string) {.async.} =
   ## Asynchronously sends data over a TLS-encrypted connection.
   ##
   ## This function sends the specified string over a TLS-encrypted socket
-  ## connection without blocking. It handles the encryption transparently 
+  ## connection without blocking. It handles the encryption transparently
   ## through mbedTLS and manages asynchronous I/O with WANT_READ/WANT_WRITE
   ## conditions. It ensures all data is sent, potentially over multiple
   ## operations.
@@ -329,9 +335,10 @@ proc send*(socket: MbedtlsAsyncSocket, data: string) {.async.} =
       if toSend.len > 0:
         var preview = toSend[0..min(40, toSend.len-1)]
         debug("Data to send (first bytes): " & preview)
-    
+
     debug("Calling mbedtls_ssl_write with size=" & $toSend.len)
-    var ret = mbedtls.mbedtls_ssl_write(socket.sslHandle, cast[pointer](unsafeAddr toSend[0]), toSend.len.cuint)
+    var ret = mbedtls.mbedtls_ssl_write(socket.sslHandle, cast[pointer](
+        unsafeAddr toSend[0]), toSend.len.cuint)
 
     if ret == mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
       debug("SSL_WANT_WRITE, waiting for socket to be writable")
@@ -355,7 +362,7 @@ proc send*(socket: MbedtlsAsyncSocket, data: string) {.async.} =
 proc recv*(socket: MbedtlsAsyncSocket, size: int): Future[string] {.async.} =
   ## Asynchronously receives data from a TLS-encrypted connection.
   ##
-  ## This function reads up to the specified number of bytes from a TLS-encrypted 
+  ## This function reads up to the specified number of bytes from a TLS-encrypted
   ## socket connection without blocking. It handles the decryption transparently
   ## through mbedTLS and manages asynchronous I/O with WANT_READ/WANT_WRITE
   ## conditions.
@@ -420,7 +427,7 @@ proc recv*(socket: MbedtlsAsyncSocket, size: int): Future[string] {.async.} =
         let preview = data[bytesReceived-ret.int..<bytesReceived-ret.int+bytes]
         var debugBytes = ""
         for c in preview:
-          if ord(c) >= 32 and ord(c) < 127:  # Only print ASCII printable chars
+          if ord(c) >= 32 and ord(c) < 127: # Only print ASCII printable chars
             debugBytes.add(c)
           else:
             debugBytes.add('.')
@@ -474,13 +481,13 @@ proc recvLine*(socket: MbedtlsAsyncSocket): Future[string] {.async.} =
       break
 
   debug("Raw received line: " & $result.len & " bytes")
-  
+
   # Remove trailing \r\n
   if result.len > 0 and result[^1] == '\n':
     result.setLen(result.len - 1)
     if result.len > 0 and result[^1] == '\r':
       result.setLen(result.len - 1)
-      
+
   debug("Processed line: " & result)
 
 proc close*(socket: MbedtlsAsyncSocket) =

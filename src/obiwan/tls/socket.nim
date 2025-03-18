@@ -9,7 +9,7 @@ type
 
   # SSL context object
   BaseSslContext* = ref object of RootObj
-    
+
   MbedtlsSslContext* = ref object of BaseSslContext
     context*: mbedtls.mbedtls_ssl_context
     config*: mbedtls.mbedtls_ssl_config
@@ -21,8 +21,8 @@ type
 
   # Base socket object without reference semantics
   MbedtlsSocketObj* = object
-    fd*: cint               # Socket file descriptor
-    domain*: cint           # Socket domain
+    fd*: cint     # Socket file descriptor
+    domain*: cint # Socket domain
     sslContext*: MbedtlsSslContext
     sslHandle*: ptr mbedtls.mbedtls_ssl_context
 
@@ -50,7 +50,8 @@ proc isIpv6Address(address: string): bool =
 proc mbedtlsError(ret: int, msg: string): ref MbedtlsError =
   var errorStr = newString(100)
   mbedtls.mbedtls_strerror(ret.cint, cast[cstring](addr errorStr[0]), 100)
-  return newException(MbedtlsError, msg & ": " & errorStr & " (error code: 0x" & toHex(ret) & ")")
+  return newException(MbedtlsError, msg & ": " & errorStr & " (error code: 0x" &
+      toHex(ret) & ")")
 
 proc newContext*(): MbedtlsSslContext =
   ## Creates a new mbedTLS SSL context with proper initialization.
@@ -101,17 +102,19 @@ proc newContext*(): MbedtlsSslContext =
     raise mbedtlsError(ret2, "Failed to set SSL config defaults")
 
   # Set the random number generator
-  mbedtls.mbedtls_ssl_conf_rng(addr result.config, mbedtls.mbedtls_ctr_drbg_random, addr result.ctr_drbg)
+  mbedtls.mbedtls_ssl_conf_rng(addr result.config,
+      mbedtls.mbedtls_ctr_drbg_random, addr result.ctr_drbg)
 
   # Initialize certificate containers
   mbedtls.mbedtls_x509_crt_init(addr result.cacert)
   mbedtls.mbedtls_x509_crt_init(addr result.cert)
   mbedtls.mbedtls_pk_init(addr result.key)
-  
+
   # mbedTLS defaults to high security settings already (TLS 1.2+)
   # No need to explicitly set min version
 
-proc setMinVersion*(context: MbedtlsSslContext, version: mbedtls.TlsVersion): bool =
+proc setMinVersion*(context: MbedtlsSslContext,
+    version: mbedtls.TlsVersion): bool =
   ## Sets the minimum TLS version for a context.
   ##
   ## This function configures the minimum TLS protocol version that will be
@@ -133,7 +136,7 @@ proc setMinVersion*(context: MbedtlsSslContext, version: mbedtls.TlsVersion): bo
   # For this simple implementation, we'll just return true
   # In a real implementation, this would call mbedtls_ssl_conf_min_version
   debug("Setting minimum TLS version to " & $version)
-  
+
   # Just return true as if we set it, since mbedTLS defaults are already appropriate
   # and we don't have direct access to mbedtls_ssl_conf_min_version in our bindings
   return true
@@ -142,10 +145,11 @@ proc getSslHandle*(socket: MbedtlsSocket): ptr mbedtls.mbedtls_ssl_context =
   socket.sslHandle
 
 proc isClosed2*(socket: MbedtlsSocket): bool =
-  socket.fd == -1  # Use -1 to indicate invalid socket
+  socket.fd == -1 # Use -1 to indicate invalid socket
 
 # Function to handle self-signed certificates
-proc customVerifyCallback(data: pointer, cert: ptr mbedtls.mbedtls_x509_crt, depth: cint, flags: ptr uint32): cint {.cdecl.} =
+proc customVerifyCallback(data: pointer, cert: ptr mbedtls.mbedtls_x509_crt,
+    depth: cint, flags: ptr uint32): cint {.cdecl.} =
   # In mbedTLS, self-signed certificates usually result in NOT_TRUSTED flag
   # Accept certificates with only trust issues
   if (flags[] and mbedtls.MBEDTLS_X509_BADCERT_NOT_TRUSTED) != 0:
@@ -165,12 +169,12 @@ proc setCustomVerify*(context: MbedtlsSslContext) =
   ##   context: The mbedTLS SSL context to configure
   ##
   ## Note:
-  ##   This is crucial for the Gemini protocol's security model, which 
+  ##   This is crucial for the Gemini protocol's security model, which
   ##   encourages the use of self-signed certificates.
   mbedtls.mbedtls_ssl_conf_verify(addr context.config, customVerifyCallback, nil)
 
 ## X.509 certificate type used in TLS connections
-## 
+##
 ## This type represents an X.509 digital certificate used for authentication
 ## in TLS connections. It provides methods for extracting certificate information
 ## such as subject names and generating fingerprints.
@@ -204,7 +208,8 @@ proc commonName*(cert: X509Certificate): string =
   debug("Calling mbedtls_x509_dn_gets on certificate...")
 
   # Get the distinguished name string
-  let ret = mbedtls.mbedtls_x509_dn_gets(subject.cstring, 512.csize_t, cast[pointer](cert))
+  let ret = mbedtls.mbedtls_x509_dn_gets(subject.cstring, 512.csize_t, cast[
+      pointer](cert))
   if ret <= 0:
     debug("ERROR: mbedtls_x509_dn_gets returned " & $ret)
     return ""
@@ -260,7 +265,7 @@ proc fingerprint*(cert: X509Certificate): string =
     cast[pointer](cert),
     sizeof(mbedtls.mbedtls_x509_crt).csize_t,
     cast[pointer](addr hash[0]),
-    0.cint  # 0 for SHA-256, 1 for SHA-224
+    0.cint # 0 for SHA-256, 1 for SHA-224
   )
 
   if ret != 0:
@@ -303,7 +308,8 @@ proc `$`*(cert: X509Certificate): string =
 
   var output = newString(4096)
   debug("Calling mbedtls_x509_crt_info on certificate...")
-  let ret = mbedtls.mbedtls_x509_crt_info(cast[cstring](addr output[0]), 4096.csize_t, "", cert)
+  let ret = mbedtls.mbedtls_x509_crt_info(cast[cstring](addr output[0]),
+      4096.csize_t, "", cert)
   if ret <= 0:
     debug("ERROR: mbedtls_x509_crt_info returned " & $ret)
     return "(nil)"
@@ -312,189 +318,193 @@ proc `$`*(cert: X509Certificate): string =
   # Only show a small part of the output in logs to avoid overwhelming
   withDebug:
     let preview = certInfo[0..<min(80, ret)]
-    debug("Got certificate info of length " & $ret & " bytes (first 80 chars): " & preview)
+    debug("Got certificate info of length " & $ret &
+        " bytes (first 80 chars): " & preview)
   return certInfo
 
 # Define our BIO functions for socket I/O
 # These need to be defined at the module level
 proc my_bio_send(ctx: pointer, buf: pointer, len: csize_t): cint {.cdecl.} =
-    debug("[BIO_SEND] Called with len=" & $len & " bytes")
+  debug("[BIO_SEND] Called with len=" & $len & " bytes")
 
-    # Debug the context
-    withDebug:
-      debug("[BIO_SEND] Context address: " & $cast[int](ctx))
-    if ctx.isNil:
-      debug("[BIO_SEND] ERROR: context is nil")
-      return mbedtls.MBEDTLS_ERR_NET_SEND_FAILED
+  # Debug the context
+  withDebug:
+    debug("[BIO_SEND] Context address: " & $cast[int](ctx))
+  if ctx.isNil:
+    debug("[BIO_SEND] ERROR: context is nil")
+    return mbedtls.MBEDTLS_ERR_NET_SEND_FAILED
 
-    # Try to get socket from context
-    var sock = cast[ptr MbedtlsSocketObj](ctx)
-    debug("[BIO_SEND] Extracted socket from context")
+  # Try to get socket from context
+  var sock = cast[ptr MbedtlsSocketObj](ctx)
+  debug("[BIO_SEND] Extracted socket from context")
 
-    # Debug the socket state
-    debug("[BIO_SEND] Socket FD: " & $sock.fd)
+  # Debug the socket state
+  debug("[BIO_SEND] Socket FD: " & $sock.fd)
 
-    # Prevent sending to invalid socket
-    if sock.fd < 0:
-      debug("[BIO_SEND] ERROR: Invalid socket FD: " & $sock.fd)
-      return mbedtls.MBEDTLS_ERR_NET_SEND_FAILED
+  # Prevent sending to invalid socket
+  if sock.fd < 0:
+    debug("[BIO_SEND] ERROR: Invalid socket FD: " & $sock.fd)
+    return mbedtls.MBEDTLS_ERR_NET_SEND_FAILED
 
-    # Show a few bytes of the buffer for debugging
+  # Show a few bytes of the buffer for debugging
+  withDebug:
+    var debugStr = ""
+    var debugHex = ""
+    for i in 0..<min(len.int, 40):
+      let b = cast[ptr uint8](cast[int](buf) + i)[]
+      debugHex.add(" " & toHex(b.int, 2))
+      if b >= 32 and b < 127: # Only print ASCII chars
+        debugStr.add(b.char)
+      else:
+        debugStr.add('.')
+
+    # See if this is a client certificate message by looking for patterns in the bytes
+    if len > 10:
+      let recordType = cast[ptr uint8](buf)[]
+      let isCertMsg = recordType == 0x16 # 0x16 is handshake record type
+
+        # Check if it might be a certificate message by looking for patterns
+      if isCertMsg:
+        debug("[BIO_SEND] Looks like a TLS handshake message (0x16)")
+        # Look for signs of client certificate
+        # Record type (1) + version (2) + length (2) + handshake type (1) = 6 bytes offset
+        if len > 6:
+          let handshakeType = cast[ptr uint8](cast[int](buf) + 5)[]
+          debug("[BIO_SEND] Handshake message type: 0x" & toHex(
+              handshakeType.int, 2))
+          # Type 11 (0x0B) is certificate
+          if handshakeType == 0x0B:
+            debug("[BIO_SEND] This appears to be a Certificate message - likely client certificate being sent")
+          # Type 15 (0x0F) is certificate verify
+          elif handshakeType == 0x0F:
+            debug("[BIO_SEND] This appears to be a CertificateVerify message - client certificate verification")
+
+    debug("[BIO_SEND] Data hex (first 40 bytes): " & debugHex)
+    debug("[BIO_SEND] Data str (first 40 bytes): " & debugStr)
+
+  # Try to write to the socket
+  debug("[BIO_SEND] Calling posix.write with fd=" & $sock.fd & " and len=" & $len.int)
+  let ret = posix.write(sock.fd, cast[pointer](buf), len.int)
+  debug("[BIO_SEND] posix.write returned: " & $ret)
+
+  if ret < 0:
+    let err = posix.errno
+    debug("[BIO_SEND] ERROR: posix.write error code: " & $err)
+    debug("[BIO_SEND] ERROR description: " & $posix.strerror(err))
+
+    # Check for specific errors
+    if err == posix.EAGAIN or err == posix.EWOULDBLOCK:
+      debug("[BIO_SEND] Would block, returning WANT_WRITE")
+      return mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE
+    elif err == posix.EPIPE:
+      debug("[BIO_SEND] Broken pipe")
+    elif err == posix.ECONNRESET:
+      debug("[BIO_SEND] Connection reset by peer")
+
+    # Return general send failure
+    return mbedtls.MBEDTLS_ERR_NET_SEND_FAILED
+
+  debug("[BIO_SEND] Successfully sent " & $ret & " bytes")
+  return ret.cint
+
+proc my_bio_recv(ctx: pointer, buf: pointer, len: csize_t): cint {.cdecl.} =
+  debug("[BIO_RECV] Called with len=" & $len & " bytes")
+
+  # Debug the context
+  withDebug:
+    debug("[BIO_RECV] Context address: " & $cast[int](ctx))
+  if ctx.isNil:
+    debug("[BIO_RECV] ERROR: context is nil")
+    return mbedtls.MBEDTLS_ERR_NET_RECV_FAILED
+
+  # Try to get socket from context
+  var sock = cast[ptr MbedtlsSocketObj](ctx)
+  debug("[BIO_RECV] Extracted socket from context")
+
+  # Debug the socket state
+  debug("[BIO_RECV] Socket FD: " & $sock.fd)
+
+  # Prevent reading from invalid socket
+  if sock.fd < 0:
+    debug("[BIO_RECV] ERROR: Invalid socket FD: " & $sock.fd)
+    return mbedtls.MBEDTLS_ERR_NET_RECV_FAILED
+
+  # Try to read from the socket
+  debug("[BIO_RECV] Calling posix.read with fd=" & $sock.fd & " and len=" & $len.int)
+  let ret = posix.read(sock.fd, cast[pointer](buf), len.int)
+  debug("[BIO_RECV] posix.read returned: " & $ret)
+
+  # Show data received for debugging
+  if ret > 0:
     withDebug:
       var debugStr = ""
       var debugHex = ""
-      for i in 0..<min(len.int, 40):
+      for i in 0..<min(ret.int, 40):
         let b = cast[ptr uint8](cast[int](buf) + i)[]
         debugHex.add(" " & toHex(b.int, 2))
-        if b >= 32 and b < 127:  # Only print ASCII chars
+        if b >= 32 and b < 127: # Only print ASCII printable chars
           debugStr.add(b.char)
         else:
           debugStr.add('.')
-      
-      # See if this is a client certificate message by looking for patterns in the bytes
-      if len > 10:
+
+      # See if this is a client certificate request message by looking for patterns in the bytes
+      if ret > 10:
         let recordType = cast[ptr uint8](buf)[]
-        let isCertMsg = recordType == 0x16  # 0x16 is handshake record type
-        
-        # Check if it might be a certificate message by looking for patterns
+        let isCertMsg = recordType == 0x16 # 0x16 is handshake record type
+
+          # Check if it might be a certificate message by looking for patterns
         if isCertMsg:
-          debug("[BIO_SEND] Looks like a TLS handshake message (0x16)")
+          debug("[BIO_RECV] Looks like a TLS handshake message (0x16)")
           # Look for signs of client certificate
           # Record type (1) + version (2) + length (2) + handshake type (1) = 6 bytes offset
-          if len > 6:
+          if ret > 6:
             let handshakeType = cast[ptr uint8](cast[int](buf) + 5)[]
-            debug("[BIO_SEND] Handshake message type: 0x" & toHex(handshakeType.int, 2))
+            debug("[BIO_RECV] Handshake message type: 0x" & toHex(
+                handshakeType.int, 2))
+            # Type 13 (0x0D) is certificate request
+            if handshakeType == 0x0D:
+              debug("[BIO_RECV] This appears to be a CertificateRequest message - server requesting client certificate")
+            # Type 22 (0x16) is client certificate message
+            elif handshakeType == 0x16:
+              debug("[BIO_RECV] This appears to be a client certificate message")
             # Type 11 (0x0B) is certificate
-            if handshakeType == 0x0B:
-              debug("[BIO_SEND] This appears to be a Certificate message - likely client certificate being sent")
-            # Type 15 (0x0F) is certificate verify
-            elif handshakeType == 0x0F:
-              debug("[BIO_SEND] This appears to be a CertificateVerify message - client certificate verification")
-      
-      debug("[BIO_SEND] Data hex (first 40 bytes): " & debugHex)
-      debug("[BIO_SEND] Data str (first 40 bytes): " & debugStr)
+            elif handshakeType == 0x0B:
+              debug("[BIO_RECV] This appears to be a Certificate message (possibly server certificate)")
 
-    # Try to write to the socket
-    debug("[BIO_SEND] Calling posix.write with fd=" & $sock.fd & " and len=" & $len.int)
-    let ret = posix.write(sock.fd, cast[pointer](buf), len.int)
-    debug("[BIO_SEND] posix.write returned: " & $ret)
+      debug("[BIO_RECV] Data hex (first 40 bytes): " & debugHex)
+      debug("[BIO_RECV] Data str (first 40 bytes): " & debugStr)
 
-    if ret < 0:
-      let err = posix.errno
-      debug("[BIO_SEND] ERROR: posix.write error code: " & $err)
-      debug("[BIO_SEND] ERROR description: " & $posix.strerror(err))
+  if ret < 0:
+    let err = posix.errno
+    debug("[BIO_RECV] ERROR: posix.read error code: " & $err)
+    debug("[BIO_RECV] ERROR description: " & $posix.strerror(err))
 
-      # Check for specific errors
-      if err == posix.EAGAIN or err == posix.EWOULDBLOCK:
-        debug("[BIO_SEND] Would block, returning WANT_WRITE")
-        return mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE
-      elif err == posix.EPIPE:
-        debug("[BIO_SEND] Broken pipe")
-      elif err == posix.ECONNRESET:
-        debug("[BIO_SEND] Connection reset by peer")
+    # Check for specific errors
+    if err == posix.EAGAIN or err == posix.EWOULDBLOCK:
+      debug("[BIO_RECV] Would block, returning WANT_READ")
+      return mbedtls.MBEDTLS_ERR_SSL_WANT_READ
+    elif err == posix.ECONNRESET:
+      debug("[BIO_RECV] Connection reset by peer")
 
-      # Return general send failure
-      return mbedtls.MBEDTLS_ERR_NET_SEND_FAILED
+    # Return general receive failure
+    return mbedtls.MBEDTLS_ERR_NET_RECV_FAILED
 
-    debug("[BIO_SEND] Successfully sent " & $ret & " bytes")
-    return ret.cint
+  if ret == 0:
+    debug("[BIO_RECV] Connection closed by peer (received 0 bytes)")
 
-proc my_bio_recv(ctx: pointer, buf: pointer, len: csize_t): cint {.cdecl.} =
-    debug("[BIO_RECV] Called with len=" & $len & " bytes")
-
-    # Debug the context
-    withDebug:
-      debug("[BIO_RECV] Context address: " & $cast[int](ctx))
-    if ctx.isNil:
-      debug("[BIO_RECV] ERROR: context is nil")
-      return mbedtls.MBEDTLS_ERR_NET_RECV_FAILED
-
-    # Try to get socket from context
-    var sock = cast[ptr MbedtlsSocketObj](ctx)
-    debug("[BIO_RECV] Extracted socket from context")
-
-    # Debug the socket state
-    debug("[BIO_RECV] Socket FD: " & $sock.fd)
-
-    # Prevent reading from invalid socket
-    if sock.fd < 0:
-      debug("[BIO_RECV] ERROR: Invalid socket FD: " & $sock.fd)
-      return mbedtls.MBEDTLS_ERR_NET_RECV_FAILED
-
-    # Try to read from the socket
-    debug("[BIO_RECV] Calling posix.read with fd=" & $sock.fd & " and len=" & $len.int)
-    let ret = posix.read(sock.fd, cast[pointer](buf), len.int)
-    debug("[BIO_RECV] posix.read returned: " & $ret)
-
-    # Show data received for debugging
-    if ret > 0:
-      withDebug:
-        var debugStr = ""
-        var debugHex = ""
-        for i in 0..<min(ret.int, 40):
-          let b = cast[ptr uint8](cast[int](buf) + i)[]
-          debugHex.add(" " & toHex(b.int, 2))
-          if b >= 32 and b < 127:  # Only print ASCII printable chars
-            debugStr.add(b.char)
-          else:
-            debugStr.add('.')
-            
-        # See if this is a client certificate request message by looking for patterns in the bytes
-        if ret > 10:
-          let recordType = cast[ptr uint8](buf)[]
-          let isCertMsg = recordType == 0x16  # 0x16 is handshake record type
-          
-          # Check if it might be a certificate message by looking for patterns
-          if isCertMsg:
-            debug("[BIO_RECV] Looks like a TLS handshake message (0x16)")
-            # Look for signs of client certificate
-            # Record type (1) + version (2) + length (2) + handshake type (1) = 6 bytes offset
-            if ret > 6:
-              let handshakeType = cast[ptr uint8](cast[int](buf) + 5)[]
-              debug("[BIO_RECV] Handshake message type: 0x" & toHex(handshakeType.int, 2))
-              # Type 13 (0x0D) is certificate request
-              if handshakeType == 0x0D:
-                debug("[BIO_RECV] This appears to be a CertificateRequest message - server requesting client certificate")
-              # Type 22 (0x16) is client certificate message
-              elif handshakeType == 0x16:
-                debug("[BIO_RECV] This appears to be a client certificate message")
-              # Type 11 (0x0B) is certificate
-              elif handshakeType == 0x0B:
-                debug("[BIO_RECV] This appears to be a Certificate message (possibly server certificate)")
-        
-        debug("[BIO_RECV] Data hex (first 40 bytes): " & debugHex)
-        debug("[BIO_RECV] Data str (first 40 bytes): " & debugStr)
-
-    if ret < 0:
-      let err = posix.errno
-      debug("[BIO_RECV] ERROR: posix.read error code: " & $err)
-      debug("[BIO_RECV] ERROR description: " & $posix.strerror(err))
-
-      # Check for specific errors
-      if err == posix.EAGAIN or err == posix.EWOULDBLOCK:
-        debug("[BIO_RECV] Would block, returning WANT_READ")
-        return mbedtls.MBEDTLS_ERR_SSL_WANT_READ
-      elif err == posix.ECONNRESET:
-        debug("[BIO_RECV] Connection reset by peer")
-
-      # Return general receive failure
-      return mbedtls.MBEDTLS_ERR_NET_RECV_FAILED
-
-    if ret == 0:
-      debug("[BIO_RECV] Connection closed by peer (received 0 bytes)")
-
-    debug("[BIO_RECV] Successfully received " & $ret & " bytes")
-    return ret.cint
+  debug("[BIO_RECV] Successfully received " & $ret & " bytes")
+  return ret.cint
 
 # Socket wrapper functions
 proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketObj,
-                         handshakeFunc: proc(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint,
+                         handshakeFunc: proc(
+                             sslCtx: ptr mbedtls.mbedtls_ssl_context): cint,
                          hostname: string) =
   ## Sets up TLS on an existing socket connection and performs handshake.
   ##
   ## This function initializes a TLS session on top of an already connected
   ## socket. It configures the TLS context with the specified hostname for
-  ## SNI (Server Name Indication), sets up the I/O callbacks, and performs 
+  ## SNI (Server Name Indication), sets up the I/O callbacks, and performs
   ## the TLS handshake.
   ##
   ## Parameters:
@@ -535,7 +545,8 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketO
   debug("Setting up BIO callbacks, socket FD: " & $socket.fd)
   # Pass the socket itself as the context for our BIO functions
   mbedtls.mbedtls_ssl_set_bio(addr context.context, cast[pointer](addr socket),
-                            cast[pointer](my_bio_send), cast[pointer](my_bio_recv), nil)
+                            cast[pointer](my_bio_send), cast[pointer](
+                                my_bio_recv), nil)
 
   # Perform SSL handshake
   debug("Starting SSL handshake...")
@@ -565,7 +576,8 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketO
 
 # Convenient overload for ref MbedtlsSocket
 proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: MbedtlsSocket,
-                         handshakeFunc: proc(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint,
+                         handshakeFunc: proc(
+                             sslCtx: ptr mbedtls.mbedtls_ssl_context): cint,
                          hostname: string) =
   debug("Wrapping socket of type MbedtlsSocket (ref object)")
   debug("Initial socket FD: " & $socket.fd)
@@ -578,79 +590,81 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: MbedtlsSocket,
 
 proc handshakeAsClient*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
   debug("Performing client handshake...")
-  
+
   # We can't directly access the client certificate in mbedTLS, but we can log what we know
   debug("Client certificate may be configured if provided during client creation")
-  
+
   # Perform the handshake
   debug("Starting SSL/TLS handshake...")
   let ret = mbedtls.mbedtls_ssl_handshake(sslCtx)
-  
+
   if ret != 0:
     # Get a more detailed error message
     var errorStr = newString(100)
     mbedtls.mbedtls_strerror(ret, cast[cstring](addr errorStr[0]), 100)
     debug("CLIENT HANDSHAKE ERROR: " & $ret & " - " & errorStr)
-    
+
     # Check for specific error conditions
     if ret == mbedtls.MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
       debug("Certificate verification failed - this is normal for self-signed certs")
-      
+
       # Get verification flags to see specific issues
       let verifyResult = mbedtls.mbedtls_ssl_get_verify_result(sslCtx)
       debug("Verification result flags: 0x" & toHex(verifyResult))
-    elif ret == mbedtls.MBEDTLS_ERR_SSL_WANT_READ or ret == mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
+    elif ret == mbedtls.MBEDTLS_ERR_SSL_WANT_READ or ret ==
+        mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
       debug("Handshake needs more data - would block")
     else:
       debug("Unknown handshake error code: " & $ret)
-      
+
       # Try checking BIO errors
       debug("Checking if this might be a BIO or socket error...")
   else:
     debug("Client handshake successful")
-    
+
     # Check if client certificate was sent
     debug("Checking if our client certificate was included in the handshake...")
     # We can't directly check if client certificate was requested in older mbedTLS
     # For now, we'll just log that we completed the handshake
     debug("Handshake completed - if client certificate was required, it was accepted")
-  
+
   return ret
 
 proc handshakeAsServer*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
   debug("Performing server handshake...")
-  
+
   # Set up the auth mode - needed for client certificate handling
   # Using MBEDTLS_SSL_VERIFY_OPTIONAL allows clients to connect with or without a certificate
   # We don't want to force all clients to have certificates by default
   debug("Server is using MBEDTLS_SSL_VERIFY_OPTIONAL auth mode")
-  
+
   # Perform the actual handshake
   let ret = mbedtls.mbedtls_ssl_handshake(sslCtx)
-  
+
   if ret != 0:
     # Get a more detailed error message
     var errorStr = newString(100)
     mbedtls.mbedtls_strerror(ret, cast[cstring](addr errorStr[0]), 100)
     debug("SERVER HANDSHAKE ERROR: " & $ret & " - " & errorStr)
-    
+
     # Check for specific error conditions
     if ret == mbedtls.MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
       debug("Client certificate verification failed")
-      
+
       # Get verification flags to see specific issues
       let verifyResult = mbedtls.mbedtls_ssl_get_verify_result(sslCtx)
       debug("Client certificate verification result flags: 0x" & toHex(verifyResult))
-    elif ret == mbedtls.MBEDTLS_ERR_SSL_WANT_READ or ret == mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
+    elif ret == mbedtls.MBEDTLS_ERR_SSL_WANT_READ or ret ==
+        mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
       debug("Handshake needs more data - would block")
     else:
       debug("Unknown handshake error code: " & $ret)
-      
+
       # Check if this might be related to client certificate issues
       debug("Checking if this might be a client certificate related error...")
   else:
     debug("Server handshake successful")
-    
+
     # Check if client certificate was received - with extra safety
     debug("Attempting to check if client certificate was provided")
     try:
@@ -660,25 +674,25 @@ proc handshakeAsServer*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
         debug("No client certificate was provided during handshake")
       else:
         debug("Client certificate was successfully provided during handshake")
-        
+
         # Get basic info about the certificate - with extra safety checks
         try:
           # Allocation on heap to ensure we have enough space
           var subjectBuf = newString(256)
           debug("Buffer created for certificate subject")
-          
+
           # Safe cast for the string buffer
           let bufPtr = cast[cstring](addr subjectBuf[0])
           debug("Buffer cast to cstring")
-          
+
           # Safe cast for the certificate
-          let certPtr = cast[pointer](clientCert) 
+          let certPtr = cast[pointer](clientCert)
           debug("Certificate pointer prepared")
-          
+
           # Get the subject name with careful error checking
           let nameLen = mbedtls.mbedtls_x509_dn_gets(bufPtr, 256.csize_t, certPtr)
           debug("mbedtls_x509_dn_gets returned: " & $nameLen)
-          
+
           if nameLen > 0:
             debug("Client certificate subject: " & subjectBuf[0..<nameLen])
           else:
@@ -687,24 +701,25 @@ proc handshakeAsServer*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
           debug("Error extracting certificate info: " & getCurrentExceptionMsg())
     except:
       debug("Error checking for client certificate: " & getCurrentExceptionMsg())
-    
+
     # Get verification result - separate try block
     try:
       let verifyResult = mbedtls.mbedtls_ssl_get_verify_result(sslCtx)
       debug("Client certificate verification result: 0x" & toHex(verifyResult))
-      
+
       # Check verification result interpretation
       if verifyResult == 0:
         debug("Client certificate verified successfully against trusted roots")
       elif (verifyResult and 0x01) != 0:
         debug("Certificate not trusted (possibly self-signed)")
     except:
-      debug("Error getting certificate verification result: " & getCurrentExceptionMsg())
-    
+      debug("Error getting certificate verification result: " &
+          getCurrentExceptionMsg())
+
     # Additional debugging - safe outside any try blocks
     debug("Handshake completed, continuing with connection")
     debug("TLS server handshake finished successfully")
-  
+
   return ret
 
 # Socket creation and connection functions
@@ -739,14 +754,15 @@ proc dial*(address: string, port: int): MbedtlsSocket =
   # Convert to string and make it persistent for the duration of the call
   var portStr = $port
   debug("Attempting to connect with mbedtls_net_connect...")
-  let ret = mbedtls.mbedtls_net_connect(addr socketContext, address, cast[cstring](addr portStr[0]), mbedtls.MBEDTLS_NET_PROTO_TCP)
+  let ret = mbedtls.mbedtls_net_connect(addr socketContext, address, cast[
+      cstring](addr portStr[0]), mbedtls.MBEDTLS_NET_PROTO_TCP)
   if ret != 0:
     debug("Connection failed with error code: " & $ret)
     raise mbedtlsError(ret, "Failed to connect to " & address & ":" & portStr)
 
   debug("Socket connection successful, fd=" & $socketContext.fd)
   socket.fd = socketContext.fd
-  socket.domain = if isIpv6Address(address): 10 else: 2  # AF_INET6 = 10, AF_INET = 2
+  socket.domain = if isIpv6Address(address): 10 else: 2 # AF_INET6 = 10, AF_INET = 2
 
   # Verify the socket is valid
   if socket.fd < 0:
@@ -795,7 +811,7 @@ proc send*(socket: MbedtlsSocket, data: pointer, size: int): int =
     var debugBytes = ""
     for i in 0..<min(size, 40):
       let b = cast[ptr uint8](cast[int](data) + i)[]
-      if b >= 32 and b < 127:  # Only print ASCII chars
+      if b >= 32 and b < 127: # Only print ASCII chars
         debugBytes.add(b.char)
       else:
         debugBytes.add('.')
@@ -815,8 +831,8 @@ proc send*(socket: MbedtlsSocket, data: pointer, size: int): int =
 proc send*(socket: MbedtlsSocket, data: string): int =
   ## Sends a string over a TLS-encrypted connection.
   ##
-  ## This is a convenience overload that allows sending a string directly 
-  ## without manually handling pointers. It transparently handles the 
+  ## This is a convenience overload that allows sending a string directly
+  ## without manually handling pointers. It transparently handles the
   ## encryption through mbedTLS.
   ##
   ## Parameters:
@@ -834,7 +850,7 @@ proc send*(socket: MbedtlsSocket, data: string): int =
   ##   let bytesWritten = socket.send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
   ##   ```
   debug("Sending string of length " & $data.len)
-  withDebug: 
+  withDebug:
     debug("String content: " & data)
   return socket.send(unsafeAddr data[0], data.len)
 
@@ -889,7 +905,7 @@ proc recv*(socket: MbedtlsSocket, data: pointer, size: int): int =
       var debugBytes = ""
       for i in 0..<min(ret.int, 40):
         let b = cast[ptr uint8](cast[int](data) + i)[]
-        if b >= 32 and b < 127:  # Only print ASCII printable chars
+        if b >= 32 and b < 127: # Only print ASCII printable chars
           debugBytes.add(b.char)
         else:
           debugBytes.add('.')

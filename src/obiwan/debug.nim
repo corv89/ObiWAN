@@ -11,7 +11,7 @@ else:
 
 # Default verbosity level
 # 0 = Critical only
-# 1 = Errors and critical 
+# 1 = Errors and critical
 # 2 = Warnings, errors, and critical
 # 3 = Info, warnings, errors, and critical
 # 4 = Debug, info, warnings, errors, and critical
@@ -52,7 +52,7 @@ proc debugf*(format: string, args: varargs[string], level: int = 4) =
   ## Formats and logs a debug message with placeholders if the verbosity level is high enough.
   ##
   ## This procedure allows formatted debug output with string interpolation
-  ## using "{}" placeholders. All debug output is automatically disabled in 
+  ## using "{}" placeholders. All debug output is automatically disabled in
   ## release builds, with no runtime overhead.
   ##
   ## Parameters:

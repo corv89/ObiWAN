@@ -11,7 +11,7 @@ type
   # Forward declaration (to be defined in TLS modules)
   X509Certificate* = pointer
   ## X.509 certificate type used for TLS certificate operations.
-  ## 
+  ##
   ## This is a forward declaration that is concretely defined in the TLS modules.
   ## It represents an X.509 certificate used in TLS connections for both client
   ## and server authentication in the Gemini protocol.
@@ -26,24 +26,24 @@ type
     ## - 6x: Client Certificate Required (60-69)
     ##
     ## See spec/protocol-specification.gmi for the official specification.
-    Input = 10,               ## Client request requires additional user input
-    SensitiveInput = 11,      ## Client request requires sensitive input (e.g. password)
-    Success = 20,             ## Request was successful, content follows
-    TempRedirect = 30,        ## Resource temporarily available at different URL
-    Redirect = 31,            ## Resource permanently available at different URL
-    TempError = 40,           ## Temporary server failure
-    ServerUnavailable = 41,   ## Server unavailable due to capacity issues
-    CGIError = 42,            ## CGI script failure
-    ProxyError = 43,          ## Request failed due to proxy error
-    Slowdown = 44,            ## Client should slow down requests
-    Error = 50,               ## Permanent server failure
-    NotFound = 51,            ## Resource not found
-    Gone = 52,                ## Resource permanently gone
-    ProxyRefused = 53,        ## Proxy request refused
-    MalformedRequest = 59,    ## Malformed request syntax
+    Input = 10, ## Client request requires additional user input
+    SensitiveInput = 11, ## Client request requires sensitive input (e.g. password)
+    Success = 20, ## Request was successful, content follows
+    TempRedirect = 30, ## Resource temporarily available at different URL
+    Redirect = 31, ## Resource permanently available at different URL
+    TempError = 40, ## Temporary server failure
+    ServerUnavailable = 41, ## Server unavailable due to capacity issues
+    CGIError = 42, ## CGI script failure
+    ProxyError = 43, ## Request failed due to proxy error
+    Slowdown = 44, ## Client should slow down requests
+    Error = 50, ## Permanent server failure
+    NotFound = 51, ## Resource not found
+    Gone = 52, ## Resource permanently gone
+    ProxyRefused = 53, ## Proxy request refused
+    MalformedRequest = 59, ## Malformed request syntax
     CertificateRequired = 60, ## Client certificate required
     CertificateUnauthorized = 61, ## Certificate not authorized for resource
-    CertificateNotValid = 62  ## Certificate not valid or expired
+    CertificateNotValid = 62 ## Certificate not valid or expired
 
   ObiwanError* = object of CatchableError
     ## Base exception type for all ObiWAN library errors.
@@ -67,8 +67,8 @@ type
     ## to support both synchronous and asynchronous operations.
     ##
     ## Use the concrete types `ObiwanClient` and `AsyncObiwanClient` in application code.
-    socket*: SocketType      ## Socket connection to server
-    maxRedirects*: Natural  ## Maximum number of redirects to follow (default: 5)
+    socket*: SocketType ## Socket connection to server
+    maxRedirects*: Natural ## Maximum number of redirects to follow (default: 5)
     sslContext*: SslContext ## TLS/SSL context for secure connection
     bodyStreamVariant*: tuple[isFutureStream: bool] ## Internal type marker
     bodyStreamSync*: Stream ## Stream for body content in synchronous mode
@@ -81,20 +81,20 @@ type
     ## both synchronous and asynchronous implementations.
     ##
     ## Use the concrete types `Response` and `AsyncResponse` in application code.
-    status*: Status          ## Response status (see Status enum)
-    meta*: string           ## Meta information (MIME type for success responses, redirection target, error details, etc.)
+    status*: Status ## Response status (see Status enum)
+    meta*: string ## Meta information (MIME type for success responses, redirection target, error details, etc.)
     certificate*: X509Certificate ## Server's X.509 certificate (nil if not provided)
-    verification*: int      ## Certificate verification result (0 = verified, other values indicate verification issues)
-    client*: ClientType     ## Reference to client that created this response
+    verification*: int ## Certificate verification result (0 = verified, other values indicate verification issues)
+    client*: ClientType ## Reference to client that created this response
 
   ObiwanServerBase*[SocketType] = ref object
     ## Base server type for Gemini protocol implementation. Generic over socket type
     ## to support both synchronous and asynchronous operations.
     ##
     ## Use the concrete types `ObiwanServer` and `AsyncObiwanServer` in application code.
-    socket*: SocketType     ## Server listening socket
-    reuseAddr*: bool       ## Allow reuse of local addresses (default: true)
-    reusePort*: bool       ## Allow multiple bindings to same port (default: false)
+    socket*: SocketType ## Server listening socket
+    reuseAddr*: bool ## Allow reuse of local addresses (default: true)
+    reusePort*: bool ## Allow multiple bindings to same port (default: false)
     sslContext*: SslContext ## TLS/SSL context for secure connections
 
   RequestBase*[SocketType] = ref object
@@ -102,10 +102,10 @@ type
     ## client certificate information (if provided), and the client socket.
     ##
     ## Use the concrete types `Request` and `AsyncRequest` in application code.
-    url*: Uri              ## Requested URL, can be used to handle virtual hosts, resources, and query parameters
+    url*: Uri ## Requested URL, can be used to handle virtual hosts, resources, and query parameters
     certificate*: X509Certificate ## Client's X.509 certificate (nil if not provided)
-    verification*: int     ## Certificate verification result (0 = verified, other values indicate verification issues)
-    client*: SocketType    ## Client socket connection
+    verification*: int ## Certificate verification result (0 = verified, other values indicate verification issues)
+    client*: SocketType ## Client socket connection
 
   # We use a dynamic binding at runtime, so the static type
   # just needs to be compatible with the concrete implementation
@@ -122,7 +122,7 @@ type
 # Certificate verification helper methods
 proc isSelfSigned*(transaction: RequestBase | ResponseBase): bool =
   ## Determines if a certificate is likely self-signed by checking verification flags.
-  ## 
+  ##
   ## Returns `true` when the certificate has only trust issues but no other validation
   ## problems, which typically indicates a self-signed certificate. This is common
   ## in the Gemini ecosystem where many servers use self-signed certificates.
@@ -135,7 +135,7 @@ proc isSelfSigned*(transaction: RequestBase | ResponseBase): bool =
   ##
   ## Returns:
   ##   `true` if the certificate appears to be self-signed, `false` otherwise
-  const BADCERT_NOT_TRUSTED = 1 shl 0  # Corresponds to MBEDTLS_X509_BADCERT_NOT_TRUSTED
+  const BADCERT_NOT_TRUSTED = 1 shl 0 # Corresponds to MBEDTLS_X509_BADCERT_NOT_TRUSTED
   return (transaction.verification and BADCERT_NOT_TRUSTED) != 0 and
          transaction.verification == BADCERT_NOT_TRUSTED
 
@@ -199,4 +199,4 @@ proc toStatus*(code: int): Status =
   of 60: Status.CertificateRequired
   of 61: Status.CertificateUnauthorized
   of 62: Status.CertificateNotValid
-  else: Status.Error  # Default to error for unknown codes
+  else: Status.Error # Default to error for unknown codes

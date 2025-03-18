@@ -16,7 +16,7 @@ import unittest # For test framework
 import "../src/obiwan"
 
 # Create certificate directories if they don't exist
-const 
+const
   serverCertDir = "certs/server"
   clientCertDir = "certs/client"
 
@@ -37,16 +37,18 @@ const
 # Check if certificates exist, generate if needed
 proc ensureCertificatesExist() =
   var missingFiles: seq[string] = @[]
-  
+
   for path in [serverCertPath, serverKeyPath, clientCertPath, clientKeyPath]:
     if not fileExists(path):
       missingFiles.add(path)
-  
+
   if missingFiles.len > 0:
     echo "Missing certificate files: ", missingFiles.join(", ")
     echo "Please generate certificates before running this test:"
-    echo "  For server: openssl req -x509 -newkey rsa:4096 -nodes -keyout ", serverKeyPath, " -out ", serverCertPath, " -days 365 -subj '/CN=localhost'"
-    echo "  For client: openssl req -x509 -newkey rsa:4096 -nodes -keyout ", clientKeyPath, " -out ", clientCertPath, " -days 365 -subj '/CN=client'"
+    echo "  For server: openssl req -x509 -newkey rsa:4096 -nodes -keyout ",
+        serverKeyPath, " -out ", serverCertPath, " -days 365 -subj '/CN=localhost'"
+    echo "  For client: openssl req -x509 -newkey rsa:4096 -nodes -keyout ",
+        clientKeyPath, " -out ", clientCertPath, " -days 365 -subj '/CN=client'"
     quit(1)
 
 # Server request handler
@@ -79,39 +81,39 @@ proc handleRequest(request: AsyncRequest) {.async.} =
 
 # Test suite for client certificate authentication
 suite "Client Certificate Authentication Tests":
-  
+
   # Shared server - initialized once before tests
   var server: AsyncObiwanServer = nil
   var serverInitialized = false
 
   # Ensure certificates exist
   ensureCertificatesExist()
-  
+
   # Set minimal verbosity level
   setVerbosityLevel(0)
-  
-  # Prepare test environment 
+
+  # Prepare test environment
   setup:
     # Initialize server only once for all tests
     if not serverInitialized:
       # Create server
       server = newAsyncObiwanServer(
-        certFile = serverCertPath, 
+        certFile = serverCertPath,
         keyFile = serverKeyPath
       )
-      
+
       # Start server in background
       asyncCheck server.serve(1965, handleRequest)
-      
+
       # Wait for server to initialize
       waitFor sleepAsync(1000)
       serverInitialized = true
-  
+
   # Clean up after tests
   teardown:
     # Nothing to do - server will stop when test completes
     discard
-  
+
   # Test basic connection without certificate
   test "Basic Connection Test":
     proc testBasicConnection() {.async.} =
@@ -119,9 +121,9 @@ suite "Client Certificate Authentication Tests":
       var response = await client.request("gemini://localhost:1965/")
       check response.status == Success
       client.close()
-    
+
     waitFor testBasicConnection()
-  
+
   # Test certificate required response
   test "Certificate Required Test":
     proc testCertRequired() {.async.} =
@@ -129,18 +131,19 @@ suite "Client Certificate Authentication Tests":
       var response = await client.request("gemini://localhost:1965/auth")
       check response.status == CertificateRequired
       client.close()
-    
+
     waitFor testCertRequired()
-  
+
   # Test with valid certificate
   test "Valid Certificate Test":
     proc testValidCert() {.async.} =
       var client = newAsyncObiwanClient()
-      check client.loadIdentityFile(certFile=clientCertPath, keyFile=clientKeyPath)
+      check client.loadIdentityFile(certFile = clientCertPath,
+          keyFile = clientKeyPath)
       var response = await client.request("gemini://localhost:1965/auth")
       check response.status == Success
       client.close()
-    
+
     waitFor testValidCert()
 
 when isMainModule:

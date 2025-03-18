@@ -34,17 +34,17 @@ proc main() {.async.} =
   ## 4. Retrieves and displays the response body asynchronously
   ##
   ## It demonstrates proper async/await usage for non-blocking network operations.
-  
+
   # Parse command line arguments
   let
     url = if paramCount() >= 1: paramStr(1) else: "gemini://geminiprotocol.net/"
     certFile = if paramCount() >= 2: paramStr(2) else: ""
     keyFile = if paramCount() >= 3: paramStr(3) else: ""
-  
+
   try:
     # Initialize async client with optional certificate for client authentication
-    let client = newAsyncObiwanClient(certFile=certFile, keyFile=keyFile)
-    
+    let client = newAsyncObiwanClient(certFile = certFile, keyFile = keyFile)
+
     # Make async request to the specified URL
     let response = await client.request(url)
     # Ensure proper cleanup when we're done
@@ -53,7 +53,7 @@ proc main() {.async.} =
     # Display response status and meta information
     echo "Status: " & $response.status
     echo "Meta: " & response.meta
-    
+
     # Display certificate information (for TOFU verification)
     echo "Server certificate:"
     if response.certificate != nil:

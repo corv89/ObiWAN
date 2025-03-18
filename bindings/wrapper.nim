@@ -8,7 +8,7 @@ type
   ObiwanClientHandle* = pointer
   ObiwanServerHandle* = pointer
   ObiwanResponseHandle* = pointer
-  
+
   ObiwanResponseData* = object
     status*: cint
     meta*: cstring
@@ -47,7 +47,8 @@ proc getLastError*(): cstring {.exportc: "getLastError", dynlib.} =
     return cacheString(error)
   return nil
 
-proc createClient*(maxRedirects: cint, certFile, keyFile: cstring): ObiwanClientHandle {.exportc: "createClient", dynlib.} =
+proc createClient*(maxRedirects: cint, certFile,
+    keyFile: cstring): ObiwanClientHandle {.exportc: "createClient", dynlib.} =
   try:
     let client = newObiwanClient(int(maxRedirects), $certFile, $keyFile)
     GC_ref(client) # Add a reference to prevent GC
@@ -73,12 +74,13 @@ proc destroyClient*(client: ObiwanClientHandle) {.exportc: "destroyClient", dynl
     setError("Error destroying client")
 
 # Response handling
-proc requestUrl*(client: ObiwanClientHandle, url: cstring): ObiwanResponseHandle {.exportc: "requestUrl", dynlib.} =
+proc requestUrl*(client: ObiwanClientHandle,
+    url: cstring): ObiwanResponseHandle {.exportc: "requestUrl", dynlib.} =
   try:
     if client.isNil:
       setError("Client is nil")
       return nil
-    
+
     let obiwanClient = cast[ObiwanClient](client)
     let resp = obiwanClient.request($url)
     GC_ref(resp) # Add a reference to prevent GC
@@ -174,7 +176,8 @@ proc responseIsSelfSigned*(response: ObiwanResponseHandle): bool {.exportc: "res
     return false
 
 # Server API
-proc createServer*(reuseAddr: bool, reusePort: bool, certFile, keyFile, sessionId: cstring): ObiwanServerHandle {.exportc: "createServer", dynlib.} =
+proc createServer*(reuseAddr: bool, reusePort: bool, certFile, keyFile,
+    sessionId: cstring): ObiwanServerHandle {.exportc: "createServer", dynlib.} =
   try:
     let server = newObiwanServer(reuseAddr, reusePort, $certFile, $keyFile, $sessionId)
     GC_ref(server) # Add a reference to prevent GC

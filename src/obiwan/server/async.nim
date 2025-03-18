@@ -29,7 +29,7 @@ proc handleRequest(request: AsyncRequest) {.async.} =
   ##
   ## This async callback function processes incoming client requests, implementing
   ## different routes without blocking the event loop. It demonstrates:
-  ## 
+  ##
   ## - Asynchronous response handling
   ## - Client certificate validation
   ## - Basic Gemini text responses
@@ -70,11 +70,11 @@ when isMainModule:
     var port = if paramCount() >= 3: parseInt(paramStr(3)) else: 1965
     # Support IPv6 with a -6 flag as the fourth argument
     var useIPv6 = paramCount() >= 4 and paramStr(4) == "-6"
-    
+
     # Initialize server with TLS certificates
     echo "Starting async server with certificates: ", certFile, ", ", keyFile
     var server = newAsyncObiwanServer(certFile = certFile, keyFile = keyFile)
-    
+
     # Start serving requests asynchronously
     # This will run until the Future completes (which is normally never)
     if useIPv6:

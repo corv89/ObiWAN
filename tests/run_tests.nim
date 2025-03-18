@@ -43,12 +43,12 @@ when isMainModule:
   echo "Running ObiWAN tests..."
   echo "----------------------"
   echo ""
-  
+
   # Generate certificates for testing
   generateTestCertificate()
   generateClientCertificate()
-  
+
   # The tests run automatically - no need to call unittest.run()
-  
+
   echo ""
   echo "Tests complete."

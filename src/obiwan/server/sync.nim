@@ -27,7 +27,7 @@ proc handleRequest(request: Request) =
   ##
   ## This callback function processes incoming client requests, implementing
   ## different routes:
-  ## 
+  ##
   ## - "/auth": Requires and validates client certificates
   ## - Default: Returns a welcome page
   ##
@@ -68,7 +68,7 @@ when isMainModule:
     # Initialize server with TLS certificates
     echo "Starting server with certificates: ", certFile, ", ", keyFile
     var server = newObiwanServer(certFile = certFile, keyFile = keyFile)
-    
+
     if useIPv6:
       echo "Server created successfully. Listening on IPv6 port ", port, "..."
       # Use IPv6 any address (::)

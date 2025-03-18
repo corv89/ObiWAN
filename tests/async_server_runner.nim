@@ -14,20 +14,20 @@ import obiwan/server/async
 import obiwan/debug
 
 const
-  TestPort = 1967  # Use non-standard port for testing
+  TestPort = 1967 # Use non-standard port for testing
   TestCertFile = "tests/test_cert.pem"
   TestKeyFile = "tests/test_key.pem"
 
 proc handleRequest(request: AsyncRequest): Future[void] {.async.} =
   debug("Received request: " & $request.url)
-  
+
   # Check for client certificate
   if request.hasCertificate:
     debug("Client provided certificate")
-  
+
   # URL handling tests
   let path = request.url.path
-  
+
   # Handle different paths for different test cases
   if path == "/" or path == "":
     # Default response
@@ -58,7 +58,7 @@ proc main() {.async.} =
     certFile = TestCertFile,
     keyFile = TestKeyFile
   )
-  
+
   # Start serving
   echo "Starting async test server on port ", TestPort
   await server.serve(TestPort, handleRequest)
