@@ -88,6 +88,37 @@ openssl req -x509 -newkey rsa:4096 -keyout certs/privkey.pem -out certs/cert.pem
 
 ## Quick Start
 
+### Running ObiWAN
+
+First, build all the programs:
+
+```bash
+# Build all clients and servers
+nimble buildall
+```
+
+Then you can run:
+
+```bash
+# Run synchronous client
+./build/client gemini://geminiprotocol.net/
+
+# Run asynchronous client
+./build/async_client gemini://geminiprotocol.com/
+
+# Run synchronous server (IPv4)
+./build/server cert.pem key.pem 1965
+
+# Run synchronous server with IPv6 (dual-stack if supported by OS)
+./build/server cert.pem key.pem 1965 -6
+
+# Run asynchronous server (IPv4)
+./build/async_server cert.pem key.pem 1965
+
+# Run asynchronous server with IPv6 (dual-stack if supported by OS)
+./build/async_server cert.pem key.pem 1965 -6
+```
+
 ### Client Usage
 
 #### Synchronous Client
@@ -295,28 +326,6 @@ nimble client       # Sync client
 nimble asyncclient  # Async client
 nimble server       # Sync server
 nimble asyncserver  # Async server
-```
-
-### Running ObiWAN
-
-```bash
-# Run synchronous client
-./build/client gemini://example.com/
-
-# Run asynchronous client
-./build/async_client gemini://example.com/
-
-# Run synchronous server (IPv4)
-./build/server cert.pem key.pem 1965
-
-# Run synchronous server with IPv6 (dual-stack if supported by OS)
-./build/server cert.pem key.pem 1965 -6
-
-# Run asynchronous server (IPv4)
-./build/async_server cert.pem key.pem 1965
-
-# Run asynchronous server with IPv6 (dual-stack if supported by OS)
-./build/async_server cert.pem key.pem 1965 -6
 ```
 
 ### Running Tests
