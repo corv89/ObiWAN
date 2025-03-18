@@ -33,14 +33,14 @@ enum ObiwanStatus {
 int main() {
     printf("ObiWAN Gemini Client Example in C (dlopen version)\n");
     printf("=================================================\n\n");
-    
+
     // Load the library with full path
     void* lib = dlopen("./build/libobiwan.so", RTLD_LAZY);
     if (!lib) {
         printf("Error loading library: %s\n", dlerror());
         return 1;
     }
-    
+
     // Get pointers to all functions
     void (*initObiwan)(void) = dlsym(lib, "initObiwan");
     bool (*hasError)(void) = dlsym(lib, "hasError");
@@ -55,10 +55,10 @@ int main() {
     bool (*responseIsVerified)(ObiwanResponseHandle) = dlsym(lib, "responseIsVerified");
     bool (*responseIsSelfSigned)(ObiwanResponseHandle) = dlsym(lib, "responseIsSelfSigned");
     void (*destroyResponse)(ObiwanResponseHandle) = dlsym(lib, "destroyResponse");
-    
+
     // Check if all functions were found
-    if (!initObiwan || !hasError || !getLastError || 
-        !createClient || !destroyClient || !requestUrl || 
+    if (!initObiwan || !hasError || !getLastError ||
+        !createClient || !destroyClient || !requestUrl ||
         !getResponseStatus || !getResponseMeta || !getResponseBody ||
         !responseHasCertificate || !responseIsVerified || !responseIsSelfSigned ||
         !destroyResponse) {
@@ -66,10 +66,10 @@ int main() {
         dlclose(lib);
         return 1;
     }
-    
+
     // Initialize the library
     initObiwan();
-    
+
     // Create a client
     ObiwanClientHandle client = createClient(5, "", "");
     if (client == NULL) {
@@ -80,11 +80,11 @@ int main() {
         dlclose(lib);
         return 1;
     }
-    
+
     // Make a request
-    const char* url = "gemini://gemini.circumlunar.space/";
+    const char* url = "gemini://geminiprotocol.net/";
     printf("Sending request to: %s\n", url);
-    
+
     ObiwanResponseHandle response = requestUrl(client, url);
     if (response == NULL) {
         printf("Failed to get response\n");
@@ -95,21 +95,21 @@ int main() {
         dlclose(lib);
         return 1;
     }
-    
+
     // Get response info
     int status = getResponseStatus(response);
     const char* meta = getResponseMeta(response);
-    
+
     printf("\nResponse received:\n");
     printf("Status: %d\n", status);
     printf("Meta: %s\n", meta);
-    
+
     // Certificate info
     printf("\nCertificate info:\n");
     printf("- Has certificate: %s\n", responseHasCertificate(response) ? "yes" : "no");
     printf("- Is verified: %s\n", responseIsVerified(response) ? "yes" : "no");
     printf("- Is self-signed: %s\n", responseIsSelfSigned(response) ? "yes" : "no");
-    
+
     // Get body if status is success (20)
     if (status == OBIWAN_SUCCESS) {
         printf("\nFetching body content...\n");
@@ -125,12 +125,12 @@ int main() {
     } else {
         printf("\nNot fetching body as status is not 20 (Success)\n");
     }
-    
+
     // Clean up
     destroyResponse(response);
     destroyClient(client);
     printf("\nConnection closed\n");
-    
+
     dlclose(lib);
     return 0;
 }

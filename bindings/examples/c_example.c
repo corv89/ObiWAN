@@ -22,11 +22,11 @@ int main() {
     }
 
     // Make a request to a Gemini server
-    const char* url = "gemini://gemini.circumlunar.space/";
+    const char* url = "gemini://geminiprotocol.net/";
     printf("Sending request to: %s\n", url);
 
     ObiwanResponseHandle response = requestUrl(client, url);
-    
+
     if (response == NULL) {
         printf("Failed to get response\n");
         if (hasError()) {
@@ -39,17 +39,17 @@ int main() {
     // Get the status code and meta information
     int status = getResponseStatus(response);
     const char* meta = getResponseMeta(response);
-    
+
     printf("\nResponse received:\n");
     printf("Status: %d\n", status);
     printf("Meta: %s\n", meta);
-    
+
     // Certificate information
     printf("\nCertificate info:\n");
     printf("- Has certificate: %s\n", responseHasCertificate(response) ? "yes" : "no");
     printf("- Is verified: %s\n", responseIsVerified(response) ? "yes" : "no");
     printf("- Is self-signed: %s\n", responseIsSelfSigned(response) ? "yes" : "no");
-    
+
     // Only try to read the body if the status is 20 (Success)
     if (status == OBIWAN_SUCCESS) {
         printf("\nFetching body content...\n");
