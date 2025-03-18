@@ -12,3 +12,6 @@ build/
 # Certificates
 certs/
 tests/certs
+
+# Vendor
+vendor/
