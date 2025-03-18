@@ -651,22 +651,45 @@ proc handshakeAsServer*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
   else:
     debug("Server handshake successful")
     
-    # Check if client certificate was received
-    let clientCert = mbedtls.mbedtls_ssl_get_peer_cert(sslCtx)
-    if clientCert.isNil:
-      debug("No client certificate was provided during handshake")
-    else:
-      debug("Client certificate was successfully provided during handshake")
-      # Get basic info about the certificate
-      var subjectBuf = newString(256)
-      let nameLen = mbedtls.mbedtls_x509_dn_gets(subjectBuf.cstring, 256.csize_t, 
-                                                cast[pointer](clientCert))
-      if nameLen > 0:
-        debug("Client certificate subject: " & subjectBuf[0..<nameLen])
+    # Check if client certificate was received - with extra safety
+    debug("Attempting to check if client certificate was provided")
+    try:
+      # Safely check for client certificate
+      let clientCert = mbedtls.mbedtls_ssl_get_peer_cert(sslCtx)
+      if clientCert == nil:
+        debug("No client certificate was provided during handshake")
       else:
-        debug("Could not extract certificate subject")
-      
-      # Get verification result
+        debug("Client certificate was successfully provided during handshake")
+        
+        # Get basic info about the certificate - with extra safety checks
+        try:
+          # Allocation on heap to ensure we have enough space
+          var subjectBuf = newString(256)
+          debug("Buffer created for certificate subject")
+          
+          # Safe cast for the string buffer
+          let bufPtr = cast[cstring](addr subjectBuf[0])
+          debug("Buffer cast to cstring")
+          
+          # Safe cast for the certificate
+          let certPtr = cast[pointer](clientCert) 
+          debug("Certificate pointer prepared")
+          
+          # Get the subject name with careful error checking
+          let nameLen = mbedtls.mbedtls_x509_dn_gets(bufPtr, 256.csize_t, certPtr)
+          debug("mbedtls_x509_dn_gets returned: " & $nameLen)
+          
+          if nameLen > 0:
+            debug("Client certificate subject: " & subjectBuf[0..<nameLen])
+          else:
+            debug("Could not extract certificate subject")
+        except:
+          debug("Error extracting certificate info: " & getCurrentExceptionMsg())
+    except:
+      debug("Error checking for client certificate: " & getCurrentExceptionMsg())
+    
+    # Get verification result - separate try block
+    try:
       let verifyResult = mbedtls.mbedtls_ssl_get_verify_result(sslCtx)
       debug("Client certificate verification result: 0x" & toHex(verifyResult))
       
@@ -675,9 +698,12 @@ proc handshakeAsServer*(sslCtx: ptr mbedtls.mbedtls_ssl_context): cint =
         debug("Client certificate verified successfully against trusted roots")
       elif (verifyResult and 0x01) != 0:
         debug("Certificate not trusted (possibly self-signed)")
-      
-      # Additional debugging
-      debug("Client certificate successfully processed by server!")
+    except:
+      debug("Error getting certificate verification result: " & getCurrentExceptionMsg())
+    
+    # Additional debugging - safe outside any try blocks
+    debug("Handshake completed, continuing with connection")
+    debug("TLS server handshake finished successfully")
   
   return ret
 
