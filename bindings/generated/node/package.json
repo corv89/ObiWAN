@@ -1,0 +1,19 @@
+{
+  "name": "obiwan",
+  "version": "0.3.0",
+  "description": "Node.js bindings for ObiWAN Gemini protocol library",
+  "main": "obiwan.js",
+  "types": "obiwan.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "gemini",
+    "protocol",
+    "tls",
+    "client",
+    "server"
+  ],
+  "author": "Corvin Wimmer",
+  "license": "All Rights Reserved"
+}

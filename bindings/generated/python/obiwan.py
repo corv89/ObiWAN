@@ -14,22 +14,10 @@ elif platform.system() == "Darwin":
 else:
     _lib_name = "libobiwan.so"
 
-# Find library path - try multiple locations
-locations = [
-    os.path.join(os.path.dirname(__file__), "..", "..", "build", _lib_name),
-    os.path.join(os.path.dirname(__file__), "..", "..", _lib_name),
-    os.path.join(os.environ.get("DYLD_LIBRARY_PATH", "."), _lib_name),
-    os.path.join(os.getcwd(), "build", _lib_name)
-]
-
-_lib_path = None
-for path in locations:
-    if os.path.exists(path):
-        _lib_path = path
-        break
-
-if _lib_path is None:
-    raise RuntimeError(f"Could not find {_lib_name} in any of these locations: {locations}")
+# Find library path
+_lib_path = os.path.join(os.path.dirname(__file__), "..", "..", "build", _lib_name)
+if not os.path.exists(_lib_path):
+    _lib_path = os.path.join(os.path.dirname(__file__), "..", "..", _lib_name)
 
 # Load the library
 _lib = ctypes.CDLL(_lib_path)
@@ -40,7 +28,10 @@ class ObiwanResponseData(Structure):
         ("status", c_int),
         ("meta", c_char_p),
         ("body", c_char_p),
-        ("hasBody", c_bool)
+        ("hasBody", c_bool),
+        ("hasCertificate", c_bool),
+        ("isVerified", c_bool),
+        ("isSelfSigned", c_bool)
     ]
 
 # Status codes
@@ -64,45 +55,138 @@ class Status:
     CERTIFICATE_UNAUTHORIZED = 61
     CERTIFICATE_NOT_VALID = 62
 
-# Set function prototypes
+# Set function prototypes - core functions
 _lib.initObiwan.argtypes = []
 _lib.initObiwan.restype = None
 
+# Error handling functions
+_lib.hasError.argtypes = []
+_lib.hasError.restype = c_bool
+
+_lib.getLastError.argtypes = []
+_lib.getLastError.restype = c_char_p
+
+# Client functions
 _lib.createClient.argtypes = [c_int, c_char_p, c_char_p]
 _lib.createClient.restype = c_void_p
 
 _lib.destroyClient.argtypes = [c_void_p]
 _lib.destroyClient.restype = None
 
-_lib.requestUrl.argtypes = [c_void_p, c_char_p, POINTER(ObiwanResponseData)]
-_lib.requestUrl.restype = c_int
+# Response functions
+_lib.requestUrl.argtypes = [c_void_p, c_char_p]
+_lib.requestUrl.restype = c_void_p
 
+_lib.destroyResponse.argtypes = [c_void_p]
+_lib.destroyResponse.restype = None
+
+_lib.getResponseStatus.argtypes = [c_void_p]
+_lib.getResponseStatus.restype = c_int
+
+_lib.getResponseMeta.argtypes = [c_void_p]
+_lib.getResponseMeta.restype = c_char_p
+
+_lib.getResponseBody.argtypes = [c_void_p]
+_lib.getResponseBody.restype = c_char_p
+
+# Certificate functions
+_lib.responseHasCertificate.argtypes = [c_void_p]
+_lib.responseHasCertificate.restype = c_bool
+
+_lib.responseIsVerified.argtypes = [c_void_p]
+_lib.responseIsVerified.restype = c_bool
+
+_lib.responseIsSelfSigned.argtypes = [c_void_p]
+_lib.responseIsSelfSigned.restype = c_bool
+
+# Server functions
 _lib.createServer.argtypes = [c_bool, c_bool, c_char_p, c_char_p, c_char_p]
 _lib.createServer.restype = c_void_p
 
 _lib.destroyServer.argtypes = [c_void_p]
 _lib.destroyServer.restype = None
 
-# Initialize library
+# Initialize library (optional, done by first client creation)
 _lib.initObiwan()
+
+# Helper functions
+def checkError():
+    """Check if an error occurred during the last operation"""
+    return _lib.hasError()
+
+def takeError():
+    """Get the error message from the last operation that failed"""
+    error = _lib.getLastError()
+    if error:
+        return error.decode('utf-8')
+    return None
 
 class Response:
     """Represents a response from a Gemini server"""
     
-    def __init__(self, status, meta, body=None):
-        self.status = status
-        self.meta = meta
-        self._body = body
+    def __init__(self, handle):
+        """Create a response object from a handle"""
+        self._handle = handle
+        self._status = _lib.getResponseStatus(handle)
+        
+        meta_ptr = _lib.getResponseMeta(handle)
+        self._meta = meta_ptr.decode('utf-8') if meta_ptr else ""
+        
+        # Body is fetched on demand to avoid unnecessary memory usage
+        self._body_cached = None
+    
+    def __del__(self):
+        """Clean up resources"""
+        if hasattr(self, '_handle') and self._handle:
+            _lib.destroyResponse(self._handle)
+            self._handle = None
     
     @property
+    def status(self):
+        """Get the response status code"""
+        return self._status
+    
+    @property
+    def meta(self):
+        """Get the response meta information"""
+        return self._meta
+    
     def body(self):
-        return self._body
+        """Get the response body content"""
+        if self._body_cached is None and self._handle and self.status == Status.SUCCESS:
+            body_ptr = _lib.getResponseBody(self._handle)
+            if body_ptr:
+                self._body_cached = body_ptr.decode('utf-8')
+            else:
+                self._body_cached = ""
+        return self._body_cached
+    
+    def hasCertificate(self):
+        """Check if the server provided a certificate"""
+        if self._handle:
+            return _lib.responseHasCertificate(self._handle)
+        return False
+    
+    def isVerified(self):
+        """Check if the server certificate is verified against a trusted root"""
+        if self._handle:
+            return _lib.responseIsVerified(self._handle)
+        return False
+    
+    def isSelfSigned(self):
+        """Check if the server certificate is self-signed"""
+        if self._handle:
+            return _lib.responseIsSelfSigned(self._handle)
+        return False
     
     def __str__(self):
-        if self._body:
-            return f"Status: {self.status}, Meta: {self.meta}, Body: {len(self._body)} bytes"
-        else:
-            return f"Status: {self.status}, Meta: {self.meta}"
+        body_len = len(self.body()) if self.body() else 0
+        cert_info = ""
+        if self.hasCertificate():
+            cert_status = "verified" if self.isVerified() else "self-signed" if self.isSelfSigned() else "invalid"
+            cert_info = f", Certificate: {cert_status}"
+        
+        return f"Status: {self.status}, Meta: {self.meta}, Body: {body_len} bytes{cert_info}"
 
 class ObiwanClient:
     """Gemini protocol client"""
@@ -111,11 +195,15 @@ class ObiwanClient:
         """Create a new Gemini client"""
         self._handle = _lib.createClient(
             max_redirects,
-            cert_file.encode('utf-8') if cert_file else None,
-            key_file.encode('utf-8') if key_file else None
+            cert_file.encode('utf-8') if cert_file else b"",
+            key_file.encode('utf-8') if key_file else b""
         )
         if not self._handle:
-            raise RuntimeError("Failed to create ObiwanClient")
+            error = takeError()
+            if error:
+                raise RuntimeError(f"Failed to create ObiwanClient: {error}")
+            else:
+                raise RuntimeError("Failed to create ObiwanClient")
     
     def __del__(self):
         self.close()
@@ -131,19 +219,16 @@ class ObiwanClient:
         if not self._handle:
             raise RuntimeError("Client is closed")
         
-        response_data = ObiwanResponseData()
-        result = _lib.requestUrl(self._handle, url.encode('utf-8'), byref(response_data))
+        response_handle = _lib.requestUrl(self._handle, url.encode('utf-8'))
         
-        if result != 0:
-            raise RuntimeError("Request failed")
+        if not response_handle:
+            error = takeError()
+            if error:
+                raise RuntimeError(f"Request failed: {error}")
+            else:
+                raise RuntimeError("Request failed")
         
-        body = None
-        if response_data.hasBody and response_data.body:
-            body = response_data.body.decode('utf-8')
-        
-        meta = response_data.meta.decode('utf-8') if response_data.meta else ""
-        
-        return Response(response_data.status, meta, body)
+        return Response(response_handle)
 
 class ObiwanServer:
     """Gemini protocol server"""
@@ -153,12 +238,16 @@ class ObiwanServer:
         self._handle = _lib.createServer(
             reuse_addr, 
             reuse_port,
-            cert_file.encode('utf-8') if cert_file else None, 
-            key_file.encode('utf-8') if key_file else None,
-            session_id.encode('utf-8') if session_id else None
+            cert_file.encode('utf-8') if cert_file else b"", 
+            key_file.encode('utf-8') if key_file else b"",
+            session_id.encode('utf-8') if session_id else b""
         )
         if not self._handle:
-            raise RuntimeError("Failed to create ObiwanServer")
+            error = takeError()
+            if error:
+                raise RuntimeError(f"Failed to create ObiwanServer: {error}")
+            else:
+                raise RuntimeError("Failed to create ObiwanServer")
     
     def __del__(self):
         self.close()
