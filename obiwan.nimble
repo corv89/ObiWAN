@@ -30,43 +30,58 @@ task buildall, "Build all":
   exec "nim c -o:build/async_server src/obiwan/server/async.nim"
 
 task test, "Run all tests":
-  echo "Running URL parsing tests..."
+  # First ensure certificates are properly set up
+  echo "Ensuring test certificates are available..."
+  exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
+  
+  echo "\nRunning URL parsing tests..."
   exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_url_parsing.nim"
   
   echo "\nRunning protocol tests..."
-  exec "cd " & thisDir() & " && nim c -d:release -r --hints:off --path:src tests/test_protocol.nim"
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -d:release -r --hints:off --path:src tests/test_protocol.nim"
   
   echo "\nRunning server tests..."
-  exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_server.nim"
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r --hints:off --path:src tests/test_server.nim"
   
   echo "\nRunning client tests..."
-  exec "cd " & thisDir() & " && nim c -r -w:off --hints:off --path:src tests/test_client.nim"
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r -w:off --hints:off --path:src tests/test_client.nim"
   
   echo "\nRunning client certificate tests..."
-  exec "cd " & thisDir() & " && nim c -r -w:off --hints:off --path:src tests/test_real_server.nim"
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r -w:off --hints:off --path:src tests/test_real_server.nim"
   
   # Note: TLS tests have indentation issues that need fixing
   # echo "\nRunning TLS tests..."
-  # exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_tls.nim"
+  # exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r --hints:off --path:src tests/test_tls.nim"
   
   # Note: IPv6 tests are experimental and may need more work
   # echo "\nRunning IPv6 tests..."
-  # exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/ipv6_test.nim"
+  # exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r --hints:off --path:src tests/ipv6_test.nim"
 
 task testserver, "Run server tests":
-  exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_server.nim"
+  echo "Ensuring test certificates are available..."
+  exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r --hints:off --path:src tests/test_server.nim"
 
 task testclient, "Run client tests":
-  exec "cd " & thisDir() & " && nim c -r -w:off --hints:off --path:src tests/test_client.nim"
+  echo "Ensuring test certificates are available..."
+  exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
+  # Pass environment variables to prevent regeneration of certificates
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r -w:off --hints:off --path:src tests/test_client.nim"
   
 task testcertauth, "Run client certificate auth tests":
-  exec "cd " & thisDir() & " && nim c -r -w:off --hints:off --path:src tests/test_real_server.nim"
+  echo "Ensuring test certificates are available..."
+  exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r -w:off --hints:off --path:src tests/test_real_server.nim"
 
 task testtls, "Run TLS tests":
-  exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_tls.nim"
+  echo "Ensuring test certificates are available..."
+  exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -r --hints:off --path:src tests/test_tls.nim"
 
 task testurl, "Run URL parsing tests":
   exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_url_parsing.nim"
 
 task testprotocol, "Run protocol compliance tests":
-  exec "cd " & thisDir() & " && nim c -d:release -r --hints:off --path:src tests/test_protocol.nim"
+  echo "Ensuring test certificates are available..."
+  exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 nim c -d:release -r --hints:off --path:src tests/test_protocol.nim"

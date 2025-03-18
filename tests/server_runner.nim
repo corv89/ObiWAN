@@ -22,9 +22,12 @@ import osproc
 
 const
   TestPort = 1967  # Use non-standard port for testing
-  TestCertFile = "tests/test_cert.pem"
-  TestKeyFile = "tests/test_key.pem"
   MaxUrlLength = 1024  # Maximum URL length per Gemini spec
+
+# Get certificate paths from environment or use defaults
+let
+  TestCertFile = if existsEnv("SERVER_CERT_FILE"): getEnv("SERVER_CERT_FILE") else: "tests/certs/server/cert.pem"
+  TestKeyFile = if existsEnv("SERVER_KEY_FILE"): getEnv("SERVER_KEY_FILE") else: "tests/certs/server/key.pem"
 
 proc handleRequest(request: Request) =
   ## Handle incoming Gemini requests, implementing all test cases
@@ -225,10 +228,11 @@ when isMainModule:
   
   try:
     # Ensure certificates exist before starting the server
-    if not fileExists(TestCertFile) or not fileExists(TestKeyFile):
+    # Skip certificate generation if SKIP_CERT_GEN is set
+    if (not fileExists(TestCertFile) or not fileExists(TestKeyFile)) and not existsEnv("SKIP_CERT_GEN"):
       info("Generating test certificate and key")
       let cmd = &"""openssl req -x509 -newkey rsa:4096 -keyout {TestKeyFile} -out {TestCertFile} \
-        -days 1 -nodes -subj "/CN=localhost" """
+        -days 90 -nodes -subj "/CN=localhost" """
       discard execCmd(cmd)
       sleep(500) # Give filesystem time to update
     

@@ -22,19 +22,26 @@ const
   TestPort = 1967  # Test server port
   TestIPv4 = "127.0.0.1"
   TestIPv6 = "::1"
-  TestCertFile = "tests/test_cert.pem"
-  TestKeyFile = "tests/test_key.pem"
-  TestClientCertFile = "tests/client_cert.pem"
-  TestClientKeyFile = "tests/client_key.pem"
+
+# Get certificate paths from environment or use defaults
+let
+  TestCertFile = if existsEnv("SERVER_CERT_FILE"): getEnv("SERVER_CERT_FILE") else: "tests/certs/server/cert.pem"
+  TestKeyFile = if existsEnv("SERVER_KEY_FILE"): getEnv("SERVER_KEY_FILE") else: "tests/certs/server/key.pem"
+  TestClientCertFile = if existsEnv("CLIENT_CERT_FILE"): getEnv("CLIENT_CERT_FILE") else: "tests/certs/client/cert.pem"
+  TestClientKeyFile = if existsEnv("CLIENT_KEY_FILE"): getEnv("CLIENT_KEY_FILE") else: "tests/certs/client/key.pem"
 
 # Global variable to hold our test server process
 var serverProcess: Process = nil
 
 proc generateTestCertificate() =
   ## Generate a self-signed certificate for testing purposes
+  # Skip if SKIP_CERT_GEN environment variable is set
+  if existsEnv("SKIP_CERT_GEN"):
+    return
+    
   createDir("tests")
   let cmd = &"""openssl req -x509 -newkey rsa:4096 -keyout {TestKeyFile} -out {TestCertFile} \
-    -days 1 -nodes -subj "/CN=localhost" """
+    -days 90 -nodes -subj "/CN=localhost" """
   discard execCmd(cmd)
 
 proc startTestServer(useIPv6: bool = false) =
