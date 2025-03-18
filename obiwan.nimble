@@ -42,6 +42,9 @@ task test, "Run all tests":
   echo "\nRunning client tests..."
   exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_client.nim"
   
+  echo "\nRunning client certificate tests..."
+  exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_real_server.nim"
+  
   # Note: TLS tests have indentation issues that need fixing
   # echo "\nRunning TLS tests..."
   # exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_tls.nim"
@@ -55,6 +58,9 @@ task testserver, "Run server tests":
 
 task testclient, "Run client tests":
   exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_client.nim"
+  
+task testcertauth, "Run client certificate auth tests":
+  exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_real_server.nim"
 
 task testtls, "Run TLS tests":
   exec "cd " & thisDir() & " && nim c -r --hints:off --path:src tests/test_tls.nim"

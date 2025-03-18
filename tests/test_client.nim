@@ -139,44 +139,45 @@ suite "ObiWAN Client Tests":
 
   # Client certificate tests
   test "Client Certificate Authentication":
-    # This test sometimes has issues with client certificate presentation
-    # As with many TLS implementations, client certificate auth can be tricky
+    # Test client certificate authentication with the actual server implementation
     
-    # For now we'll skip this test since the client certificate authentication
-    # appears to have issues in the TLS implementation we're using
-    # It would require more extensive debugging and possibly modifying the mbedTLS bindings
-    skip()
+    # Make sure we have client certificate files
+    if not fileExists(TestClientCertFile) or not fileExists(TestClientKeyFile):
+      info("Generating client certificate files")
+      generateClientCertificate()
+      sleep(1000) # Give filesystem time to update
     
-    # The original test code is kept below for reference
-    #
-    # # Make sure we have client certificate files
-    # if not fileExists(TestClientCertFile) or not fileExists(TestClientKeyFile):
-    #   info("Generating client certificate files")
-    #   generateClientCertificate()
-    #   sleep(1000) # Give filesystem time to update
-    # 
-    # # Create client with certificate
-    # let client = newObiwanClient(
-    #   certFile = TestClientCertFile,
-    #   keyFile = TestClientKeyFile
-    # )
-    # 
-    # # Send request to authentication-required endpoint
-    # info("Sending request to authentication endpoint with client cert")
-    # debug("Using client certificate for authentication")
-    # let response = client.request(fmt"gemini://{IPv4Localhost}:{TestPort}/auth")
-    # 
-    # # Check that we got a success response (requires client certificate)
-    # check response.status == Success
-    # check response.meta == "text/gemini"
-    # 
-    # # Check that the response body contains certificate info
-    # let body = response.body()
-    # check body.contains("Authenticated")
-    # check body.contains("Certificate CN:")
-    # 
-    # # Clean up
-    # client.close()
+    # Since client certificates require a clean server environment, restart the server
+    stopTestServer()
+    sleep(500) # Wait for the server to fully stop
+    info("Starting clean server for client certificate test")
+    startTestServer(false)
+    sleep(3000) # Give the server ample time to start
+    
+    # Create client with certificate
+    info("Creating client with certificate")
+    var client = newObiwanClient()
+    
+    # First check that /auth returns CertificateRequired without a certificate
+    let initialResponse = client.request(fmt"gemini://{IPv4Localhost}:{TestPort}/auth")
+    check initialResponse.status == CertificateRequired
+    
+    # Now load the client certificate
+    info("Loading client certificate")
+    check client.loadIdentityFile(TestClientCertFile, TestClientKeyFile)
+    
+    # Send request with client certificate
+    info("Sending request with client certificate")
+    let response = client.request(fmt"gemini://{IPv4Localhost}:{TestPort}/auth")
+    
+    # Check response
+    check response.status == Success
+    check response.meta == "text/gemini"
+    check response.body.contains("Authenticated") or 
+          response.body.contains("Certificate accepted")
+    
+    # Clean up
+    client.close()
 
   # Request without client certificate
   test "Certificate Required Response":

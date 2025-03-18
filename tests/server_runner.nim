@@ -45,26 +45,46 @@ proc handleRequest(request: Request) =
   let isTestPort = port == $TestPort or port == ""  # Empty means default port
   let rawUrl = $url
   
-  # Check for client certificate
-  if request.hasCertificate:
-    info("Client provided certificate")
-    # Cast to correct type for X509Certificate from socket module
-    let certPtr = cast[tlsSocket.X509Certificate](request.certificate)
-    var cn = certPtr.commonName()
-    
-    # Log certificate details
-    debug("Client certificate details:", 3)
-    debug("  Certificate CN: " & cn, 3)
-    debug("  Self-signed: " & $request.isSelfSigned, 3)
-    debug("  Verified: " & $request.isVerified, 3)
-    debug("  Verification status: " & $request.verification, 3)
-    debug("  Certificate fingerprint: " & certPtr.fingerprint(), 3)
-    
-    # Print detailed certificate info at highest verbosity
-    withDebug:
-      debug("Full certificate details:\n" & $certPtr, 4)
-  else:
-    debug("No client certificate provided", 3)
+  # Safely check for client certificate
+  try:
+    if request.hasCertificate:
+      info("Client provided certificate")
+      
+      try:
+        # Cast to correct type for X509Certificate from socket module
+        let certPtr = cast[tlsSocket.X509Certificate](request.certificate)
+        info("Certificate object obtained")
+        
+        try:
+          var cn = certPtr.commonName()
+          
+          # Log certificate details
+          debug("Client certificate details:", 3)
+          debug("  Certificate CN: " & cn, 3)
+          debug("  Self-signed: " & $request.isSelfSigned, 3)
+          debug("  Verified: " & $request.isVerified, 3)
+          debug("  Verification status: " & $request.verification, 3)
+          
+          try:
+            debug("  Certificate fingerprint: " & certPtr.fingerprint(), 3)
+          except:
+            debug("  Error getting fingerprint: " & getCurrentExceptionMsg(), 3)
+          
+          # Print detailed certificate info at highest verbosity
+          try:
+            withDebug:
+              debug("Full certificate details:\n" & $certPtr, 4)
+          except:
+            debug("  Error getting full certificate details: " & getCurrentExceptionMsg(), 4)
+            
+        except:
+          debug("Error processing certificate details: " & getCurrentExceptionMsg(), 2)
+      except:
+        debug("Error casting certificate object: " & getCurrentExceptionMsg(), 2)
+    else:
+      debug("No client certificate provided", 3)
+  except:
+    debug("Error checking for client certificate: " & getCurrentExceptionMsg(), 2)
   
   # Start with protocol validation tests
   
@@ -200,29 +220,50 @@ TLS Version: TLS 1.3 (assumed)
 
 when isMainModule:
   # Set lower verbosity level for tests
-  setVerbosityLevel(2) # Only show warnings and errors 
+  setVerbosityLevel(3) # Show info, warnings, and errors
   
-  # Create server with test certificate and key
-  let server = newObiwanServer(
-    certFile = TestCertFile,
-    keyFile = TestKeyFile
-  )
-  
-  # Get command line arguments
-  var useIPv6 = false
-  for i in 1..paramCount():
-    if paramStr(i) == "-6":
-      useIPv6 = true
-      break
-  
-  # TLS version is configured by mbedTLS defaults (typically TLS 1.2+)
-  
-  # Start serving
-  info("Starting test server on port " & $TestPort & (if useIPv6: " with IPv6" else: " (IPv4 only)"))
-  
-  if useIPv6:
-    # Use IPv6 dual-stack mode (accepts both IPv4 and IPv6 connections)
-    server.serve(TestPort, handleRequest, "::")
-  else:
-    # IPv4 only mode
-    server.serve(TestPort, handleRequest)
+  try:
+    # Ensure certificates exist before starting the server
+    if not fileExists(TestCertFile) or not fileExists(TestKeyFile):
+      info("Generating test certificate and key")
+      let cmd = &"""openssl req -x509 -newkey rsa:4096 -keyout {TestKeyFile} -out {TestCertFile} \
+        -days 1 -nodes -subj "/CN=localhost" """
+      discard execCmd(cmd)
+      sleep(500) # Give filesystem time to update
+    
+    # Make sure the certificates were generated successfully
+    if not fileExists(TestCertFile) or not fileExists(TestKeyFile):
+      echo "Failed to create certificate files"
+      quit(1)
+    
+    # Create server with test certificate and key
+    info("Creating server with certificates: " & TestCertFile & ", " & TestKeyFile)
+    
+    # Use the actual server implementation from obiwan/server/sync.nim
+    var server = newObiwanServer(
+      certFile = TestCertFile,
+      keyFile = TestKeyFile
+    )
+    
+    # Get command line arguments
+    var useIPv6 = false
+    for i in 1..paramCount():
+      if paramStr(i) == "-6":
+        useIPv6 = true
+        break
+    
+    # TLS version is configured by mbedTLS defaults (typically TLS 1.2+)
+    
+    # Start serving
+    info("Starting test server on port " & $TestPort & (if useIPv6: " with IPv6" else: " (IPv4 only)"))
+    
+    if useIPv6:
+      # Use IPv6 dual-stack mode (accepts both IPv4 and IPv6 connections)
+      server.serve(TestPort, handleRequest, "::")
+    else:
+      # IPv4 only mode
+      server.serve(TestPort, handleRequest)
+  except:
+    # Handle any exceptions during server startup
+    echo "Error starting server: ", getCurrentExceptionMsg()
+    quit(1)

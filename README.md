@@ -203,10 +203,18 @@ let client = newObiwanClient(
   keyFile = "client-key.pem"
 )
 
-# Or load certificates after client creation
+# OR (preferred approach) load certificates after client creation
+let client = newObiwanClient()
 if client.loadIdentityFile("client-cert.pem", "client-key.pem"):
   echo "Certificate loaded successfully"
+  let response = client.request("gemini://example.com/auth")
+  # Check if authentication succeeded
+  if response.status == Success:
+    echo "Authentication successful!"
 ```
+
+The `loadIdentityFile` approach is recommended because it allows making different
+requests with and without client authentication during the same session.
 
 ### Server Certificate Verification
 
