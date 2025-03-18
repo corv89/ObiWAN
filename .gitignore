@@ -11,3 +11,5 @@ build/
 
 # Certificates
 certs/
+tests/test_cert.pem
+tests/test_key.pem
