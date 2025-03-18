@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.2.0"
+version       = "0.3.0"
 author        = "Corvin Wimmer"
 description   = "A lightweight Gemini protocol client and server library in Nim."
 license       = "All Rights Reserved"
@@ -29,7 +29,7 @@ task buildall, "Build all":
   if not fileExists(mbedtlsLib):
     echo "Building vendored mbedTLS first..."
     exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
-  
+
   # Now build the ObiWAN components
   exec "nim c -o:build/client src/obiwan/client/sync.nim"
   exec "nim c -o:build/async_client src/obiwan/client/async.nim"
@@ -42,7 +42,7 @@ task test, "Run all tests in sequence":
   if not fileExists(mbedtlsLib):
     echo "Building vendored mbedTLS first..."
     exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
-  
+
   # Ensure certificates are properly set up
   echo "Ensuring test certificates are available..."
   exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
@@ -92,7 +92,7 @@ task testparallel, "Run all tests in parallel":
   if not fileExists(mbedtlsLib):
     echo "Building vendored mbedTLS first..."
     exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
-    
+
   # Ensure certificates are properly set up
   echo "Ensuring test certificates are available..."
   exec "cd " & thisDir() & "/tests && nim --hints:off e config.nims"
