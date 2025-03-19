@@ -5,6 +5,7 @@
 {.pragma: mbedtlsCrypto, importc, header: "<mbedtls/entropy.h>".}
 {.pragma: mbedtlsRandom, importc, header: "<mbedtls/ctr_drbg.h>".}
 {.pragma: mbedtlsCerts, importc, header: "<mbedtls/x509_crt.h>".}
+{.pragma: mbedtlsPsa, importc, header: "<psa/crypto.h>".}
 
 # Basic types
 type
@@ -57,6 +58,12 @@ var
       header: "<mbedtls/net_sockets.h>".}: cint
   MBEDTLS_X509_BADCERT_NOT_TRUSTED* {.mbedtlsConstants,
       header: "<mbedtls/x509_crt.h>".}: cuint
+      
+  # TLS 1.3 cipher suite constants - manually defined with their standard values
+  # These are defined directly instead of imported because they might not be available in all builds
+  MBEDTLS_TLS_AES_128_GCM_SHA256* = 0x1301.cint
+  MBEDTLS_TLS_AES_256_GCM_SHA384* = 0x1302.cint
+  MBEDTLS_TLS_CHACHA20_POLY1305_SHA256* = 0x1303.cint
 
 # Core SSL functions
 proc mbedtls_ssl_init*(ctx: ptr mbedtls_ssl_context) {.mbedtls.}
@@ -67,6 +74,8 @@ proc mbedtls_ssl_conf_rng*(conf: ptr mbedtls_ssl_config, f_rng: pointer,
     p_rng: pointer) {.mbedtls.}
 proc mbedtls_ssl_conf_authmode*(conf: ptr mbedtls_ssl_config,
     authmode: cint) {.mbedtls.}
+proc mbedtls_ssl_conf_ciphersuites*(conf: ptr mbedtls_ssl_config,
+    ciphersuites: ptr cint) {.mbedtls.}
 proc mbedtls_ssl_setup*(ssl: ptr mbedtls_ssl_context,
     conf: ptr mbedtls_ssl_config): cint {.mbedtls.}
 proc mbedtls_ssl_set_hostname*(ssl: ptr mbedtls_ssl_context,
@@ -135,6 +144,9 @@ proc mbedtls_strerror*(errnum: cint, buffer: cstring,
     buflen: csize_t) {.importc, header: "<mbedtls/error.h>".}
 proc mbedtls_sha256*(input: pointer, ilen: csize_t, output: pointer,
     is224: cint): cint {.importc, header: "<mbedtls/sha256.h>".}
+
+# PSA Crypto functions (required for TLS 1.3)
+proc psa_crypto_init*(): cint {.mbedtlsPsa.}
 
 # X509 utility functions
 proc mbedtls_x509_dn_gets*(buf: cstring, size: csize_t,

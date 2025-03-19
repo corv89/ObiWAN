@@ -73,6 +73,13 @@ proc newContext*(): MbedtlsSslContext =
   ##   # Further configure the context for client or server use
   ##   ```
   result = MbedtlsSslContext()
+  
+  # Initialize PSA crypto subsystem (required for TLS 1.3)
+  debug("Initializing PSA crypto subsystem for TLS 1.3")
+  let psaInit = mbedtls.psa_crypto_init()
+  if psaInit != 0:
+    raise mbedtlsError(psaInit, "Failed to initialize PSA crypto subsystem")
+  debug("PSA crypto subsystem initialized successfully")
 
   # Initialize the entropy source and CTRDBG
   mbedtls.mbedtls_entropy_init(addr result.entropy)
@@ -104,6 +111,14 @@ proc newContext*(): MbedtlsSslContext =
   # Set the random number generator
   mbedtls.mbedtls_ssl_conf_rng(addr result.config,
       mbedtls.mbedtls_ctr_drbg_random, addr result.ctr_drbg)
+      
+  # Explicitly set only TLS 1.3 ChaCha20-Poly1305 ciphersuite
+  var ciphersuites = [
+    mbedtls.MBEDTLS_TLS_CHACHA20_POLY1305_SHA256,
+    0  # NULL-terminate the list
+  ]
+  debug("Setting TLS 1.3 ChaCha20-Poly1305 as the only ciphersuite")
+  mbedtls.mbedtls_ssl_conf_ciphersuites(addr result.config, addr ciphersuites[0])
 
   # Initialize certificate containers
   mbedtls.mbedtls_x509_crt_init(addr result.cacert)
