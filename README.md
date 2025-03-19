@@ -107,16 +107,62 @@ Then you can run:
 ./build/async_client gemini://geminiprotocol.com/
 
 # Run synchronous server (IPv4)
-./build/server cert.pem key.pem 1965
+./build/server 
 
-# Run synchronous server with IPv6 (dual-stack if supported by OS)
-./build/server cert.pem key.pem 1965 -6
+# Run synchronous server with IPv6 support
+./build/server -6
 
 # Run asynchronous server (IPv4)
-./build/async_server cert.pem key.pem 1965
+./build/async_server
 
-# Run asynchronous server with IPv6 (dual-stack if supported by OS)
-./build/async_server cert.pem key.pem 1965 -6
+# Run asynchronous server with IPv6 support
+./build/async_server -6
+```
+
+### Configuration
+
+ObiWAN now supports TOML configuration files. By default, it looks for a file named `obiwan.toml` in:
+
+1. The current directory
+2. `~/.config/obiwan/config.toml`
+3. `/etc/obiwan/config.toml`
+
+You can also specify a config file directly:
+
+```bash
+./build/server myconfig.toml
+./build/client gemini://example.com/ myconfig.toml
+```
+
+Example configuration:
+
+```toml
+# ObiWAN Gemini Server Configuration
+
+[server]
+address = "0.0.0.0"
+port = 1965
+cert_file = "cert.pem"
+key_file = "privkey.pem"
+reuse_addr = true
+reuse_port = false
+use_ipv6 = false
+session_id = ""
+doc_root = "./content"
+log_requests = true
+max_request_length = 1024
+
+[client]
+cert_file = ""
+key_file = ""
+max_redirects = 5
+timeout = 30
+user_agent = "ObiWAN/0.3.0"
+
+[log]
+level = 1
+file = ""
+timestamp = true
 ```
 
 ### Client Usage
@@ -337,6 +383,7 @@ nimble testurl      # URL parsing tests
 - [x] Comprehensive test suite
 - [ ] Improved documentation
 - [x] Vendored mbedTLS 3.6.2
+- [x] TOML configuration file support
 - [ ] Complete server implementation
 - [ ] CGI support
 - [ ] MIME type support

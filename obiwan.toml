@@ -1,0 +1,26 @@
+# ObiWAN Gemini Server Configuration
+
+[server]
+address = "0.0.0.0"
+port = 1965
+cert_file = "certs/cert.pem"
+key_file = "certs/privkey.pem"
+reuse_addr = true
+reuse_port = false
+use_ipv6 = false
+session_id = ""
+doc_root = "./content"
+log_requests = true
+max_request_length = 1024
+
+[client]
+cert_file = ""
+key_file = ""
+max_redirects = 5
+timeout = 30
+user_agent = "ObiWAN/0.4.0"
+
+[log]
+level = 1
+file = ""
+timestamp = true

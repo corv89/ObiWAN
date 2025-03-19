@@ -1,46 +1,42 @@
 ## Asynchronous Gemini Server implementation
 ## 
-## This module provides a non-blocking asynchronous Gemini protocol server
-## using the ObiWAN library. It demonstrates basic request handling and
-## client certificate authentication while utilizing Nim's asyncdispatch
-## for efficient concurrency.
-##
-## The server responds to two routes:
-## - Root path ("/") - A simple welcome message
-## - "/auth" - Demonstrates client certificate authentication
+## This module provides an asynchronous (non-blocking) Gemini protocol server
+## using the ObiWAN library. It supports configuration via TOML files
+## for easier setup and maintenance.
 ##
 ## Usage:
 ##   ```
-##   ./build/async_server [cert_file] [key_file] [port] [-6]
+##   ./build/async_server [config_file] [-6]
 ##   ```
 ## Where:
-##   - cert_file: Path to server certificate (defaults to "cert.pem")
-##   - key_file: Path to server private key (defaults to "privkey.pem")
-##   - port: Port to listen on (defaults to 1965)
-##   - -6: Optional flag to enable IPv6 support (listens on :: instead of 0.0.0.0)
+##   - config_file: Optional path to TOML configuration file (default: searches for obiwan.toml)
+##   - -6: Optional flag to force IPv6 mode regardless of config file
+##
+## Configuration is loaded from:
+## 1. The specified config file or
+## 2. ./obiwan.toml (current directory) or
+## 3. ~/.config/obiwan/config.toml (user config) or
+## 4. /etc/obiwan/config.toml (system config)
+## 5. Default values if no config file is found
 
-import asyncdispatch
 import os
-import strutils # For parseInt
+import asyncdispatch
 import "../../obiwan"
+import "../config"
 
-proc handleRequest(request: AsyncRequest) {.async.} =
-  ## Asynchronously handles incoming Gemini requests.
+proc handleRequest(request: AsyncRequest): Future[void] {.async.} =
+  ## Handles incoming Gemini requests asynchronously.
   ##
-  ## This async callback function processes incoming client requests, implementing
-  ## different routes without blocking the event loop. It demonstrates:
+  ## This callback function processes incoming client requests, implementing
+  ## different routes:
   ##
-  ## - Asynchronous response handling
-  ## - Client certificate validation
-  ## - Basic Gemini text responses
+  ## - "/auth": Requires and validates client certificates
+  ## - Default: Returns a welcome page
   ##
   ## Parameters:
-  ##   request: The AsyncRequest object containing URL, client info, and async response methods
-  ##
-  ## Note:
-  ##   All response methods must be awaited since they return Futures
+  ##   request: The AsyncRequest object containing URL, client info, and response methods
+  echo "Request path: ", request.url.path
   if request.url.path == "/auth":
-    echo request.url.path
     if not request.hasCertificate():
       # Client didn't provide a certificate, request one
       await request.respond(CertificateRequired, "CLIENT CERTIFICATE REQUIRED")
@@ -59,32 +55,65 @@ proc handleRequest(request: AsyncRequest) {.async.} =
       await request.respond(Success, "text/gemini", response)
   else:
     # Default welcome page
-    await request.respond(Success, "text/gemini", "# Hello world\n\nThis is the ObiWAN Gemini server.\n\nTry visiting /auth to test client certificate authentication.")
+    await request.respond(Success, "text/gemini", "# Hello world\n\nThis is the ObiWAN Async Gemini server.\n\nTry visiting /auth to test client certificate authentication.")
 
 # Main application code
 when isMainModule:
+  # Parse command line arguments
+  var configPath = if paramCount() >= 1 and not (paramStr(1) == "-6"): paramStr(1) else: ""
+  var forceIPv6 = paramCount() >= 1 and paramStr(1) == "-6" or
+                  paramCount() >= 2 and paramStr(2) == "-6"
+  
   try:
-    # Parse command line arguments
-    var certFile = if paramCount() >= 1: paramStr(1) else: "cert.pem"
-    var keyFile = if paramCount() >= 2: paramStr(2) else: "privkey.pem"
-    var port = if paramCount() >= 3: parseInt(paramStr(3)) else: 1965
-    # Support IPv6 with a -6 flag as the fourth argument
-    var useIPv6 = paramCount() >= 4 and paramStr(4) == "-6"
-
-    # Initialize server with TLS certificates
-    echo "Starting async server with certificates: ", certFile, ", ", keyFile
-    var server = newAsyncObiwanServer(certFile = certFile, keyFile = keyFile)
-
-    # Start serving requests asynchronously
-    # This will run until the Future completes (which is normally never)
-    if useIPv6:
-      echo "Listening on IPv6 port ", port, "..."
-      # Use IPv6 any address (::)
-      waitFor server.serve(port, handleRequest, "::")
+    # Load configuration
+    var config = loadOrCreateConfig(configPath)
+    
+    # Initialize logging
+    initializeLogging(config)
+    
+    # Override IPv6 setting if -6 flag is provided
+    if forceIPv6:
+      config.server.useIPv6 = true
+    
+    # Output startup information
+    echo "\nObiWAN Async Gemini Server"
+    echo "========================="
+    
+    # Show config path if available, otherwise indicate default config
+    if resolveConfigFile(configPath) != "":
+      echo "Using configuration from: ", resolveConfigFile(configPath)
     else:
-      echo "Listening on IPv4 port ", port, "..."
-      # Default to IPv4
-      waitFor server.serve(port, handleRequest)
+      echo "Using default configuration (no config file found)"
+    
+    # Show key server settings
+    echo "Server settings:"
+    echo "  Address:    ", if config.server.address == "": 
+                            if config.server.useIPv6: "::" else: "0.0.0.0" 
+                          else: config.server.address
+    echo "  Port:       ", config.server.port
+    echo "  Protocol:   ", if config.server.useIPv6: "IPv6" else: "IPv4"
+    echo "  Cert file:  ", config.server.certFile
+    echo "  Key file:   ", config.server.keyFile
+    echo "  Doc root:   ", config.server.docRoot
+    
+    # Initialize server with TLS certificates
+    var server = newAsyncObiwanServer(
+      reuseAddr = config.server.reuseAddr,
+      reusePort = config.server.reusePort,
+      certFile = config.server.certFile,
+      keyFile = config.server.keyFile,
+      sessionId = config.server.sessionId
+    )
+    
+    # Get the effective address
+    let effectiveAddress = if config.server.address == "": 
+                            if config.server.useIPv6: "::" else: "" 
+                           else: config.server.address
+    
+    # Start the server
+    echo "\nServer starting..."
+    waitFor server.serve(config.server.port, handleRequest, effectiveAddress)
+    
   except:
     # Handle any exceptions that occur during server setup or operation
     echo "Error: ", getCurrentExceptionMsg()

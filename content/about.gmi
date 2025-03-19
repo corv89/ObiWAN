@@ -1,0 +1,26 @@
+# About ObiWAN
+
+ObiWAN is a lightweight Gemini protocol client and server library written in Nim.
+
+## What is Gemini?
+
+Gemini is a new internet protocol that:
+
+* Is heavier than Gopher, lighter than the web
+* Takes the best parts of Gopher and the web
+* Prioritizes privacy and simplicity
+* Uses mandatory TLS for security
+* Features a simple text-based format
+
+## Configuration
+
+ObiWAN can be configured using TOML files. By default, it looks for:
+
+1. ./obiwan.toml
+2. ~/.config/obiwan/config.toml 
+3. /etc/obiwan/config.toml
+
+The configuration file sets server and client options like ports, certificates, 
+logging levels, and more.
+
+=> / Back to home

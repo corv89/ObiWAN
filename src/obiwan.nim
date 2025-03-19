@@ -101,6 +101,10 @@ export tlsSocket.handshakeAsClient, tlsSocket.handshakeAsServer
 export tlsAsyncSocket.handshakeAsClient, tlsAsyncSocket.handshakeAsServer
 export debug.debug, debug.debugf, debug.withDebug, debug.debugEnabled
 
+# Export config module
+import obiwan/config
+export config
+
 # Certificate handling is available through the tlsSocket module
 
 # Client API

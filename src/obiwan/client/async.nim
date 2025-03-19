@@ -1,73 +1,104 @@
 ## Asynchronous Gemini Client implementation
 ## 
 ## This module provides a command-line asynchronous (non-blocking) Gemini protocol client
-## using the ObiWAN library and Nim's asyncdispatch module. It demonstrates non-blocking 
-## request/response handling, certificate verification, and content display.
+## using the ObiWAN library. It supports configuration via TOML files
+## for easier setup and maintenance.
 ##
 ## Usage:
 ##   ```
-##   ./build/async_client [url] [cert_file] [key_file]
+##   ./build/async_client [url] [config_file]
 ##   ```
 ## Where:
 ##   - url: The Gemini URL to request (defaults to "gemini://geminiprotocol.net/")
-##   - cert_file: Optional path to client certificate for authentication
-##   - key_file: Optional path to client private key for authentication
+##   - config_file: Optional path to TOML configuration file
 ##
-## Example:
-##   ```
-##   ./build/async_client gemini://example.com/ client-cert.pem client-key.pem
-##   ```
+## Configuration is loaded from:
+## 1. The specified config file or
+## 2. ./obiwan.toml (current directory) or
+## 3. ~/.config/obiwan/config.toml (user config) or
+## 4. /etc/obiwan/config.toml (system config)
+## 5. Default values if no config file is found
+##
+## To use client certificates, specify them in the config file:
+## ```toml
+## [client]
+## cert_file = "client-cert.pem"
+## key_file = "client-key.pem"
+## ```
 
 import asyncdispatch
 import os
 import strutils
-
 import "../../obiwan"
+import "../config"
 
 proc main() {.async.} =
   ## Main asynchronous function that performs the Gemini request and displays results.
-  ##
-  ## This function:
-  ## 1. Creates an async Gemini client
-  ## 2. Makes a non-blocking request to the specified URL
-  ## 3. Displays response information including status, headers, and certificate details
-  ## 4. Retrieves and displays the response body asynchronously
-  ##
-  ## It demonstrates proper async/await usage for non-blocking network operations.
-
+  
   # Parse command line arguments
   let
     url = if paramCount() >= 1: paramStr(1) else: "gemini://geminiprotocol.net/"
-    certFile = if paramCount() >= 2: paramStr(2) else: ""
-    keyFile = if paramCount() >= 3: paramStr(3) else: ""
+    configPath = if paramCount() >= 2: paramStr(2) else: ""
 
   try:
-    # Initialize async client with optional certificate for client authentication
-    let client = newAsyncObiwanClient(certFile = certFile, keyFile = keyFile)
-
-    # Make async request to the specified URL
+    # Load configuration
+    var config = loadOrCreateConfig(configPath)
+    
+    # Initialize logging
+    initializeLogging(config)
+    
+    # Output startup information
+    echo "ObiWAN Async Gemini Client"
+    echo "========================="
+    
+    # Show config path if available, otherwise indicate default config
+    if resolveConfigFile(configPath) != "":
+      echo "Using configuration from: ", resolveConfigFile(configPath)
+    else:
+      echo "Using default configuration"
+    
+    # Show client settings
+    echo "Client settings:"
+    echo "  Max redirects: ", config.client.maxRedirects
+    if config.client.certFile != "":
+      echo "  Client cert:   ", config.client.certFile
+      echo "  Client key:    ", config.client.keyFile
+    else:
+      echo "  Client cert:   none"
+    
+    # Initialize client with certificate from config
+    echo "\nRequesting URL: ", url
+    let client = newAsyncObiwanClient(
+      maxRedirects = config.client.maxRedirects,
+      certFile = config.client.certFile,
+      keyFile = config.client.keyFile
+    )
+    
+    # Make request to the specified URL
     let response = await client.request(url)
     # Ensure proper cleanup when we're done
     defer: client.close()
 
     # Display response status and meta information
-    echo "Status: " & $response.status
-    echo "Meta: " & response.meta
+    echo "\nResponse:"
+    echo "  Status: " & $response.status & " (" & $response.status.int & ")"
+    echo "  Meta:   " & response.meta
 
     # Display certificate information (for TOFU verification)
-    echo "Server certificate:"
+    echo "\nCertificate info:"
     if response.certificate != nil:
       echo "  Certificate available"
-      echo "  Is Verified: " & $response.isVerified
+      echo "  Is Verified:    " & $response.isVerified
       echo "  Is Self-signed: " & $response.isSelfSigned
     else:
       echo "  No certificate available"
 
-    # Asynchronously retrieve and display the response body
-    echo "Body: " & await response.body
+    # Display response body content
+    echo "\nResponse body:"
+    echo await response.body
   except CatchableError:
-    # Handle any errors that occurred during the async request
-    echo getCurrentExceptionMsg()
+    # Handle any errors that occurred during the request
+    echo "Error: ", getCurrentExceptionMsg()
 
 # Main application code
 when isMainModule:

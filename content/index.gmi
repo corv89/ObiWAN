@@ -1,0 +1,21 @@
+# Welcome to ObiWAN
+
+This is a sample Gemini server using the ObiWAN library with TOML configuration.
+
+## Features
+
+* Simple and lightweight Gemini protocol implementation
+* Both synchronous and asynchronous APIs
+* Configuration via TOML files
+* TLS security with mbedTLS
+* IPv4 and IPv6 support
+
+## Try It Out
+
+=> /about.gmi About this server
+=> /auth Client certificate authentication demo
+
+## Links
+
+=> gemini://geminiprotocol.net/ Official Gemini Protocol site
+=> gemini://geminispace.info/ Gemini search engine
