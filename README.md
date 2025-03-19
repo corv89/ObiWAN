@@ -332,6 +332,40 @@ waitFor main()
 
 ## Advanced Usage
 
+### File Serving
+
+ObiWAN includes built-in file serving functionality for Gemini servers:
+
+```nim
+import obiwan
+
+proc main() =
+  # Create a server with default configuration
+  let server = newObiwanServer(
+    certFile = "certs/cert.pem",
+    keyFile = "certs/privkey.pem",
+    docRoot = "./content"  # Path to content directory
+  )
+  
+  # Start the server - it will automatically serve files from docRoot
+  server.serve(1965)
+
+main()
+```
+
+Features of the file serving system:
+- Automatic MIME type detection based on file extensions
+- Directory listings when no index.gmi is present
+- Security against path traversal attacks
+- Support for relative and absolute paths
+- Handles index.gmi files for directories automatically
+
+From the command line:
+```bash
+# Run the server with a custom document root
+./build/obiwan-server --docroot=/path/to/content
+```
+
 ### Client Certificates
 
 ```nim
@@ -400,6 +434,8 @@ src/
 │   ├── config.nim          # Configuration management
 │   ├── client.nim          # Unified client executable (sync/async)
 │   ├── server.nim          # Unified server executable (sync/async)
+│   ├── fs.nim              # File system operations and MIME handling
+│   ├── url.nim             # URL parsing and manipulation
 │   ├── tls/                # TLS implementation
 │   │   ├── mbedtls.nim     # C bindings
 │   │   ├── socket.nim      # Base socket
@@ -433,9 +469,9 @@ nimble testurl      # URL parsing tests
 - [x] TOML configuration file support
 - [x] Command-line argument parsing with docopt
 - [x] Unified client and server executables with sync/async modes
-- [ ] Complete server implementation with file serving
+- [x] Complete server implementation with file serving
 - [ ] CGI support
-- [ ] MIME type detection
+- [x] MIME type detection
 
 ## License
 
