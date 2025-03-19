@@ -30,7 +30,6 @@
 ## 5. Default values if no config file is found
 ## Command line options override values from config files.
 
-import os
 import asyncdispatch
 import strutils # For parseInt
 import "../obiwan"

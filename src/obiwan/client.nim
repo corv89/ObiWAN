@@ -36,7 +36,6 @@
 ## ```
 
 import asyncdispatch
-import os
 import strutils
 import "../obiwan"
 import "config"
