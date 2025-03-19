@@ -2,7 +2,7 @@
 import streams
 import asyncdispatch
 import net
-import obiwan/url
+import "./url"
 
 # Export specific symbols from dependency modules
 export Port
