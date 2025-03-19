@@ -32,6 +32,7 @@
 
 import asyncdispatch
 import strutils # For parseInt
+import os # For getCurrentDir
 import "../obiwan"
 import "config"
 import "fs"
@@ -182,7 +183,12 @@ proc runSyncServer(config: Config) =
                          else: config.server.address
 
   # Create a request handler that includes the docRoot
-  let docRoot = config.server.docRoot
+  # Convert relative paths to absolute for proper file resolution
+  let docRoot = if config.server.docRoot.startsWith("./"):
+                  getCurrentDir() / config.server.docRoot[2..^1]
+                else:
+                  config.server.docRoot
+  
   proc requestHandler(request: Request) =
     handleSyncRequest(request, docRoot)
 
@@ -207,7 +213,12 @@ proc runAsyncServer(config: Config) {.async.} =
                          else: config.server.address
 
   # Create a request handler that includes the docRoot
-  let docRoot = config.server.docRoot
+  # Convert relative paths to absolute for proper file resolution
+  let docRoot = if config.server.docRoot.startsWith("./"):
+                  getCurrentDir() / config.server.docRoot[2..^1]
+                else:
+                  config.server.docRoot
+  
   proc requestHandler(request: AsyncRequest): Future[void] {.async.} =
     await handleAsyncRequest(request, docRoot)
 
