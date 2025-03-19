@@ -13,16 +13,16 @@ requires "nimcrypto >= 0.6.2"
 requires "genny >= 0.1.0"
 
 task client, "Build sync client":
-  exec "nim c -o:build/client src/obiwan/client/sync.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/client src/obiwan/client/sync.nim"
 
 task asyncclient, "Build async client":
-  exec "nim c -o:build/async_client src/obiwan/client/async.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/async_client src/obiwan/client/async.nim"
 
 task server, "Build sync server":
-  exec "nim c -o:build/server src/obiwan/server/sync.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/server src/obiwan/server/sync.nim"
 
 task asyncserver, "Build async server":
-  exec "nim c -o:build/async_server src/obiwan/server/async.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/async_server src/obiwan/server/async.nim"
 
 task buildall, "Build all":
   # First build mbedTLS if not already built
@@ -31,11 +31,11 @@ task buildall, "Build all":
     echo "Building vendored mbedTLS first..."
     exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
 
-  # Now build the ObiWAN components
-  exec "nim c -o:build/client src/obiwan/client/sync.nim"
-  exec "nim c -o:build/async_client src/obiwan/client/async.nim"
-  exec "nim c -o:build/server src/obiwan/server/sync.nim"
-  exec "nim c -o:build/async_server src/obiwan/server/async.nim"
+  # Now build the ObiWAN components with release mode, size optimizations, and LTO
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/client src/obiwan/client/sync.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/async_client src/obiwan/client/async.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/server src/obiwan/server/sync.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/async_server src/obiwan/server/async.nim"
 
 task test, "Run all tests in sequence":
   # First build mbedTLS if not already built
@@ -176,7 +176,7 @@ task bindings, "Generate C bindings for ObiWAN":
   
   # Build the shared library with wrapper functions
   echo "Building shared library..."
-  exec "nim c --app:lib --threads:on --tlsEmulation:off -d:release -o:build/libobiwan.so bindings/wrapper.nim"
+  exec "nim c --app:lib --threads:on --tlsEmulation:off -d:release --opt:size --passC:-flto --passL:-flto -o:build/libobiwan.so bindings/wrapper.nim"
   
   # Check if a customized header file already exists
   let headerPath = thisDir() & "/bindings/generated/obiwan.h"
