@@ -34,6 +34,7 @@ import asyncdispatch
 import strutils # For parseInt
 import "../obiwan"
 import "config"
+import "fs"
 import docopt
 
 const doc = """
@@ -61,18 +62,21 @@ Options:
 const version = "ObiWAN Gemini Server v0.5.0"
 
 # Synchronous request handler
-proc handleSyncRequest(request: Request) =
+proc handleSyncRequest(request: Request, docRoot: string) =
   ## Handles incoming Gemini requests synchronously.
   ##
   ## This callback function processes incoming client requests, implementing
   ## different routes:
   ##
   ## - "/auth": Requires and validates client certificates
-  ## - Default: Returns a welcome page
+  ## - All other paths: Served from the document root
   ##
   ## Parameters:
   ##   request: The Request object containing URL, client info, and response methods
+  ##   docRoot: The document root directory for file serving
   echo "Request path: ", request.url.path
+  
+  # Special route for client certificate authentication
   if request.url.path == "/auth":
     if not request.hasCertificate():
       # Client didn't provide a certificate, request one
@@ -91,22 +95,40 @@ proc handleSyncRequest(request: Request) =
       response.add("Hello authenticated client!")
       request.respond(Success, "text/gemini", response)
   else:
-    # Default welcome page
-    request.respond(Success, "text/gemini", "# Hello world\n\nThis is the ObiWAN Gemini server.\n\nTry visiting /auth to test client certificate authentication.")
+    # Handle file requests for other paths
+    let result = handleFileRequest(docRoot, request.url.path)
+    
+    if result.success:
+      # File or directory found, serve it
+      request.respond(Success, result.mimeType, result.content)
+    else:
+      # Handle errors
+      case result.errorMsg:
+      of "File not found":
+        request.respond(NotFound, result.errorMsg)
+      of "Directory listing not allowed":
+        request.respond(NotFound, result.errorMsg)
+      of "Security violation: Path traversal attempt":
+        request.respond(MalformedRequest, "Invalid request")
+      else:
+        request.respond(TempError, result.errorMsg)
 
 # Asynchronous request handler
-proc handleAsyncRequest(request: AsyncRequest): Future[void] {.async.} =
+proc handleAsyncRequest(request: AsyncRequest, docRoot: string): Future[void] {.async.} =
   ## Handles incoming Gemini requests asynchronously.
   ##
   ## This callback function processes incoming client requests, implementing
   ## different routes:
   ##
   ## - "/auth": Requires and validates client certificates
-  ## - Default: Returns a welcome page
+  ## - All other paths: Served from the document root
   ##
   ## Parameters:
   ##   request: The AsyncRequest object containing URL, client info, and response methods
+  ##   docRoot: The document root directory for file serving
   echo "Request path: ", request.url.path
+  
+  # Special route for client certificate authentication
   if request.url.path == "/auth":
     if not request.hasCertificate():
       # Client didn't provide a certificate, request one
@@ -125,8 +147,23 @@ proc handleAsyncRequest(request: AsyncRequest): Future[void] {.async.} =
       response.add("Hello authenticated client!")
       await request.respond(Success, "text/gemini", response)
   else:
-    # Default welcome page
-    await request.respond(Success, "text/gemini", "# Hello world\n\nThis is the ObiWAN Async Gemini server.\n\nTry visiting /auth to test client certificate authentication.")
+    # Handle file requests for other paths
+    let result = handleFileRequest(docRoot, request.url.path)
+    
+    if result.success:
+      # File or directory found, serve it
+      await request.respond(Success, result.mimeType, result.content)
+    else:
+      # Handle errors
+      case result.errorMsg:
+      of "File not found":
+        await request.respond(NotFound, result.errorMsg)
+      of "Directory listing not allowed":
+        await request.respond(NotFound, result.errorMsg)
+      of "Security violation: Path traversal attempt":
+        await request.respond(MalformedRequest, "Invalid request")
+      else:
+        await request.respond(TempError, result.errorMsg)
 
 # Run the server in synchronous mode
 proc runSyncServer(config: Config) =
@@ -144,9 +181,14 @@ proc runSyncServer(config: Config) =
                           if config.server.useIPv6: "::" else: ""
                          else: config.server.address
 
+  # Create a request handler that includes the docRoot
+  let docRoot = config.server.docRoot
+  proc requestHandler(request: Request) =
+    handleSyncRequest(request, docRoot)
+
   # Start the server
   echo "\nServer starting in synchronous mode..."
-  server.serve(config.server.port, handleSyncRequest, effectiveAddress)
+  server.serve(config.server.port, requestHandler, effectiveAddress)
 
 # Run the server in asynchronous mode
 proc runAsyncServer(config: Config) {.async.} =
@@ -164,9 +206,14 @@ proc runAsyncServer(config: Config) {.async.} =
                           if config.server.useIPv6: "::" else: ""
                          else: config.server.address
 
+  # Create a request handler that includes the docRoot
+  let docRoot = config.server.docRoot
+  proc requestHandler(request: AsyncRequest): Future[void] {.async.} =
+    await handleAsyncRequest(request, docRoot)
+
   # Start the server
   echo "\nServer starting in asynchronous mode..."
-  await server.serve(config.server.port, handleAsyncRequest, effectiveAddress)
+  await server.serve(config.server.port, requestHandler, effectiveAddress)
 
 # Main application code
 when isMainModule:
