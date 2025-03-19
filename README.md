@@ -101,40 +101,31 @@ Then you can run with the unified command-line interface:
 
 ```bash
 # Show unified client help
-./build/gemini --help
+./build/obiwan-client --help
 
 # Run client in synchronous mode (default)
-./build/gemini gemini://geminiprotocol.net/
+./build/obiwan-client gemini://geminiprotocol.net/
 
 # Run client in asynchronous mode
-./build/gemini --async gemini://geminiprotocol.com/
+./build/obiwan-client --async gemini://geminiprotocol.com/
 
 # Run client with verbose output and custom redirects
-./build/gemini --verbose --redirects=10 gemini://example.com/
+./build/obiwan-client --verbose --redirects=10 gemini://example.com/
 
 # Show unified server help
-./build/gemini-server --help
+./build/obiwan-server --help
 
 # Run server in asynchronous mode (default)
-./build/gemini-server --port=1965
+./build/obiwan-server --port=1965
 
 # Run server in synchronous mode
-./build/gemini-server --sync
+./build/obiwan-server --sync
 
 # Run server with IPv6 support
-./build/gemini-server --ipv6
+./build/obiwan-server --ipv6
 
 # Run server with custom certificate files
-./build/gemini-server --cert=mycert.pem --key=mykey.pem
-```
-
-**Note:** The legacy executables (`client`, `async_client`, `server`, `async_server`) are still available for backward compatibility.
-```bash
-# Legacy executables
-./build/client gemini://example.com/
-./build/async_client gemini://example.com/
-./build/server
-./build/async_server
+./build/obiwan-server --cert=mycert.pem --key=mykey.pem
 ```
 
 ### Command Line Options
