@@ -97,33 +97,51 @@ First, build all the programs:
 nimble buildall
 ```
 
-Then you can run with the new command-line interface:
+Then you can run with the unified command-line interface:
 
 ```bash
-# Show client help
-./build/client --help
+# Show unified client help
+./build/gemini --help
 
-# Run synchronous client
-./build/client gemini://geminiprotocol.net/
+# Run client in synchronous mode (default)
+./build/gemini gemini://geminiprotocol.net/
 
-# Run asynchronous client with options
-./build/async_client --verbose gemini://geminiprotocol.com/
+# Run client in asynchronous mode
+./build/gemini --async gemini://geminiprotocol.com/
 
-# Run synchronous server with options
-./build/server --port=1966 --docroot=./my-content
+# Run client with verbose output and custom redirects
+./build/gemini --verbose --redirects=10 gemini://example.com/
+
+# Show unified server help
+./build/gemini-server --help
+
+# Run server in asynchronous mode (default)
+./build/gemini-server --port=1965
+
+# Run server in synchronous mode
+./build/gemini-server --sync
 
 # Run server with IPv6 support
-./build/server --ipv6
+./build/gemini-server --ipv6
 
-# Run asynchronous server with certificate options
-./build/async_server --cert=mycert.pem --key=mykey.pem
+# Run server with custom certificate files
+./build/gemini-server --cert=mycert.pem --key=mykey.pem
+```
+
+**Note:** The legacy executables (`client`, `async_client`, `server`, `async_server`) are still available for backward compatibility.
+```bash
+# Legacy executables
+./build/client gemini://example.com/
+./build/async_client gemini://example.com/
+./build/server
+./build/async_server
 ```
 
 ### Command Line Options
 
 ObiWAN provides a comprehensive command-line interface for both clients and servers:
 
-#### Client Options
+#### Unified Client Options
 
 ```
 Options:
@@ -133,10 +151,11 @@ Options:
   -r --redirects=<num>    Maximum number of redirects [default: 5]
   --cert=<file>           Client certificate file for authentication
   --key=<file>            Client key file for authentication
+  -a --async              Use asynchronous (non-blocking) mode
   --version               Show version information
 ```
 
-#### Server Options
+#### Unified Server Options
 
 ```
 Options:
@@ -146,6 +165,7 @@ Options:
   -p --port=<port>        Port to listen on [default: 1965]
   -a --address=<addr>     Address to bind to [default: 0.0.0.0]
   -6 --ipv6               Use IPv6 instead of IPv4
+  --sync                  Use synchronous (blocking) mode
   -r --reuse-addr         Allow reuse of local addresses [default: true]
   --reuse-port            Allow multiple bindings to same port
   --cert=<file>           Server certificate file [default: cert.pem]
@@ -153,6 +173,8 @@ Options:
   --docroot=<dir>         Document root directory [default: ./content]
   --version               Show version information
 ```
+
+Note: The server uses asynchronous (non-blocking) mode by default.
 
 ### Configuration Files
 
@@ -384,14 +406,17 @@ src/
 ├── obiwan/
 │   ├── common.nim          # Shared types and protocols
 │   ├── debug.nim           # Debug utilities
+│   ├── config.nim          # Configuration management
+│   ├── client.nim          # Unified client executable (sync/async)
+│   ├── server.nim          # Unified server executable (sync/async)
 │   ├── tls/                # TLS implementation
 │   │   ├── mbedtls.nim     # C bindings
 │   │   ├── socket.nim      # Base socket
 │   │   └── async_socket.nim # Async socket
-│   ├── client/
+│   ├── client/             # Legacy client implementations
 │   │   ├── sync.nim        # Synchronous client
 │   │   └── async.nim       # Asynchronous client
-│   └── server/
+│   └── server/             # Legacy server implementations
 │       ├── sync.nim        # Synchronous server
 │       └── async.nim       # Asynchronous server
 ```
@@ -422,6 +447,7 @@ nimble testurl      # URL parsing tests
 - [x] Vendored mbedTLS 3.6.2
 - [x] TOML configuration file support
 - [x] Command-line argument parsing with docopt
+- [x] Unified client and server executables with sync/async modes
 - [ ] Complete server implementation with file serving
 - [ ] CGI support
 - [ ] MIME type detection

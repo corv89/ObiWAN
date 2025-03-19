@@ -14,17 +14,11 @@ requires "genny >= 0.1.0"
 requires "parsetoml >= 0.7.2"
 requires "docopt >= 0.7.0"
 
-task client, "Build sync client":
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/client src/obiwan/client/sync.nim"
+task client, "Build ObiWAN client":
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/obiwan-client src/obiwan/client.nim"
 
-task asyncclient, "Build async client":
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/async_client src/obiwan/client/async.nim"
-
-task server, "Build sync server":
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/server src/obiwan/server/sync.nim"
-
-task asyncserver, "Build async server":
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/async_server src/obiwan/server/async.nim"
+task server, "Build ObiWAN server":
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/obiwan-server src/obiwan/server.nim"
 
 task buildall, "Build all":
   # First build mbedTLS if not already built
@@ -34,10 +28,9 @@ task buildall, "Build all":
     exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
 
   # Now build the ObiWAN components with release mode, size optimizations, and LTO
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/client src/obiwan/client/sync.nim"
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/async_client src/obiwan/client/async.nim"
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/server src/obiwan/server/sync.nim"
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/async_server src/obiwan/server/async.nim"
+  echo "Building unified client and server..."
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/gemini src/obiwan/client.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/gemini-server src/obiwan/server.nim"
 
 task test, "Run all tests in sequence":
   # First build mbedTLS if not already built
@@ -169,29 +162,29 @@ task bindings, "Generate C bindings for ObiWAN":
   exec "mkdir -p " & thisDir() & "/bindings/generated"
   exec "mkdir -p " & thisDir() & "/bindings/generated/python"
   exec "mkdir -p " & thisDir() & "/bindings/generated/node"
-  
+
   # First build mbedTLS if not already built
   let mbedtlsLib = thisDir() & "/vendor/mbedtls/library/libmbedtls.a"
   if not fileExists(mbedtlsLib):
     echo "Building vendored mbedTLS first..."
     exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
-  
+
   # Build the shared library with wrapper functions
   echo "Building shared library..."
   exec "nim c --app:lib --threads:on --tlsEmulation:off -d:release --opt:size --passC:-flto --passL:-flto -o:build/libobiwan.so bindings/wrapper.nim"
-  
+
   # Check if a customized header file already exists
   let headerPath = thisDir() & "/bindings/generated/obiwan.h"
   var generateHeader = true
-  
+
   if fileExists(headerPath):
     let headerContent = readFile(headerPath)
-    if headerContent.contains("Platform-specific symbol name handling") or 
-       headerContent.contains("OBIWAN_FUNC") or 
+    if headerContent.contains("Platform-specific symbol name handling") or
+       headerContent.contains("OBIWAN_FUNC") or
        headerContent.contains("responseHasCertificate"):
       echo "Detected customized header file, preserving..."
       generateHeader = false
-  
+
   # Generate improved C header if needed
   if generateHeader:
     echo "Generating improved C header..."
@@ -208,7 +201,7 @@ task bindings, "Generate C bindings for ObiWAN":
 extern "C" {
 #endif
 
-/* 
+/*
  * Platform-specific symbol name handling
  * On macOS, symbols in dynamic libraries have an underscore prefix
  */
@@ -238,28 +231,28 @@ enum ObiwanStatus {
     /* 1X: Input */
     OBIWAN_INPUT = 10,              /* Input required from user */
     OBIWAN_SENSITIVE_INPUT = 11,    /* Sensitive input (password) required */
-    
+
     /* 2X: Success */
     OBIWAN_SUCCESS = 20,            /* Success, content follows */
-    
+
     /* 3X: Redirect */
     OBIWAN_TEMP_REDIRECT = 30,      /* Temporary redirect to another URL */
     OBIWAN_REDIRECT = 31,           /* Permanent redirect to another URL */
-    
+
     /* 4X: Temporary Failure */
     OBIWAN_TEMP_ERROR = 40,         /* Temporary server failure */
     OBIWAN_SERVER_UNAVAILABLE = 41, /* Server unavailable (capacity issues) */
     OBIWAN_CGI_ERROR = 42,          /* CGI script failure */
     OBIWAN_PROXY_ERROR = 43,        /* Proxy request failure */
     OBIWAN_SLOWDOWN = 44,           /* Request rate too high, slow down */
-    
+
     /* 5X: Permanent Failure */
     OBIWAN_ERROR = 50,              /* Permanent server failure */
     OBIWAN_NOT_FOUND = 51,          /* Resource not found */
     OBIWAN_GONE = 52,               /* Resource permanently gone */
     OBIWAN_PROXY_REFUSED = 53,      /* Proxy request refused */
     OBIWAN_MALFORMED_REQUEST = 59,  /* Malformed request syntax */
-    
+
     /* 6X: Client Certificate Required */
     OBIWAN_CERT_REQUIRED = 60,      /* Client certificate required */
     OBIWAN_CERT_UNAUTHORIZED = 61,  /* Certificate not authorized for resource */
@@ -312,7 +305,7 @@ OBIWAN_FUNC(const char*, getLastError, (void));
 
 /**
  * Create a new Gemini client.
- * 
+ *
  * @param maxRedirects Maximum number of redirects to follow (recommended: 5)
  * @param certFile Path to client certificate file (may be empty)
  * @param keyFile Path to client key file (may be empty)
@@ -322,14 +315,14 @@ OBIWAN_FUNC(ObiwanClientHandle, createClient, (int maxRedirects, const char* cer
 
 /**
  * Destroy a client and free resources.
- * 
+ *
  * @param client Client handle to destroy
  */
 OBIWAN_FUNC(void, destroyClient, (ObiwanClientHandle client));
 
 /**
  * Make a request to a Gemini server.
- * 
+ *
  * @param client Client handle
  * @param url Gemini URL to request (must start with gemini://)
  * @return Response handle or NULL on error
@@ -342,14 +335,14 @@ OBIWAN_FUNC(ObiwanResponseHandle, requestUrl, (ObiwanClientHandle client, const 
 
 /**
  * Destroy a response object and free resources.
- * 
+ *
  * @param response Response handle to destroy
  */
 OBIWAN_FUNC(void, destroyResponse, (ObiwanResponseHandle response));
 
 /**
  * Get the status code from a response.
- * 
+ *
  * @param response Response handle
  * @return Status code or -1 on error
  */
@@ -357,7 +350,7 @@ OBIWAN_FUNC(int, getResponseStatus, (ObiwanResponseHandle response));
 
 /**
  * Get the meta information from a response.
- * 
+ *
  * @param response Response handle
  * @return Meta string or NULL on error
  */
@@ -365,7 +358,7 @@ OBIWAN_FUNC(const char*, getResponseMeta, (ObiwanResponseHandle response));
 
 /**
  * Get the body content from a response.
- * 
+ *
  * @param response Response handle
  * @return Body content or NULL if not available or on error
  */
@@ -373,7 +366,7 @@ OBIWAN_FUNC(const char*, getResponseBody, (ObiwanResponseHandle response));
 
 /**
  * Check if the server provided a certificate.
- * 
+ *
  * @param response Response handle
  * @return true if certificate is present, false otherwise
  */
@@ -381,7 +374,7 @@ OBIWAN_FUNC(bool, responseHasCertificate, (ObiwanResponseHandle response));
 
 /**
  * Check if the server certificate is verified against a trusted root.
- * 
+ *
  * @param response Response handle
  * @return true if certificate is verified, false otherwise
  */
@@ -389,7 +382,7 @@ OBIWAN_FUNC(bool, responseIsVerified, (ObiwanResponseHandle response));
 
 /**
  * Check if the server certificate is self-signed.
- * 
+ *
  * @param response Response handle
  * @return true if certificate is self-signed, false otherwise
  */
@@ -401,7 +394,7 @@ OBIWAN_FUNC(bool, responseIsSelfSigned, (ObiwanResponseHandle response));
 
 /**
  * Create a new Gemini server.
- * 
+ *
  * @param reuseAddr Allow reuse of local addresses
  * @param reusePort Allow multiple bindings to the same port
  * @param certFile Path to server certificate (required)
@@ -413,7 +406,7 @@ OBIWAN_FUNC(ObiwanServerHandle, createServer, (bool reuseAddr, bool reusePort, c
 
 /**
  * Destroy a server and free resources.
- * 
+ *
  * @param server Server handle to destroy
  */
 OBIWAN_FUNC(void, destroyServer, (ObiwanServerHandle server));
@@ -425,19 +418,19 @@ OBIWAN_FUNC(void, destroyServer, (ObiwanServerHandle server));
 #endif /* OBIWAN_H */
 """
     writeFile(headerPath, headerContent)
-  
+
   # Check if a customized Python wrapper already exists
   let pythonPath = thisDir() & "/bindings/generated/python/obiwan.py"
   var generatePython = true
-  
+
   if fileExists(pythonPath):
     let pythonContent = readFile(pythonPath)
-    if pythonContent.contains("responseHasCertificate") or 
-       pythonContent.contains("responseIsVerified") or 
+    if pythonContent.contains("responseHasCertificate") or
+       pythonContent.contains("responseIsVerified") or
        pythonContent.contains("hasError"):
       echo "Detected customized Python wrapper, preserving..."
       generatePython = false
-  
+
   # Generate improved Python wrapper if needed
   if generatePython:
     echo "Generating Python wrapper..."
@@ -519,16 +512,16 @@ _lib.initObiwan()
 
 class Response:
     \"\"\"Represents a response from a Gemini server\"\"\"
-    
+
     def __init__(self, status, meta, body=None):
         self.status = status
         self.meta = meta
         self._body = body
-    
+
     @property
     def body(self):
         return self._body
-    
+
     def __str__(self):
         if self._body:
             return f"Status: {self.status}, Meta: {self.meta}, Body: {len(self._body)} bytes"
@@ -537,7 +530,7 @@ class Response:
 
 class ObiwanClient:
     \"\"\"Gemini protocol client\"\"\"
-    
+
     def __init__(self, max_redirects=5, cert_file="", key_file=""):
         \"\"\"Create a new Gemini client\"\"\"
         self._handle = _lib.createClient(
@@ -547,62 +540,62 @@ class ObiwanClient:
         )
         if not self._handle:
             raise RuntimeError("Failed to create ObiwanClient")
-    
+
     def __del__(self):
         self.close()
-    
+
     def close(self):
         \"\"\"Close the client and free resources\"\"\"
         if hasattr(self, '_handle') and self._handle:
             _lib.destroyClient(self._handle)
             self._handle = None
-    
+
     def request(self, url):
         \"\"\"Make a request to a Gemini server\"\"\"
         if not self._handle:
             raise RuntimeError("Client is closed")
-        
+
         response_data = ObiwanResponseData()
         result = _lib.requestUrl(self._handle, url.encode('utf-8'), byref(response_data))
-        
+
         if result != 0:
             raise RuntimeError("Request failed")
-        
+
         body = None
         if response_data.hasBody and response_data.body:
             body = response_data.body.decode('utf-8')
-        
+
         meta = response_data.meta.decode('utf-8') if response_data.meta else ""
-        
+
         return Response(response_data.status, meta, body)
 
 class ObiwanServer:
     \"\"\"Gemini protocol server\"\"\"
-    
+
     def __init__(self, reuse_addr=True, reuse_port=False, cert_file="", key_file="", session_id=""):
         \"\"\"Create a new Gemini server\"\"\"
         self._handle = _lib.createServer(
-            reuse_addr, 
+            reuse_addr,
             reuse_port,
-            cert_file.encode('utf-8') if cert_file else None, 
+            cert_file.encode('utf-8') if cert_file else None,
             key_file.encode('utf-8') if key_file else None,
             session_id.encode('utf-8') if session_id else None
         )
         if not self._handle:
             raise RuntimeError("Failed to create ObiwanServer")
-    
+
     def __del__(self):
         self.close()
-    
+
     def close(self):
         \"\"\"Close the server and free resources\"\"\"
         if hasattr(self, '_handle') and self._handle:
             _lib.destroyServer(self._handle)
             self._handle = None
 """
-    
+
     writeFile(pythonPath, pythonContent)
-    
+
     # Create __init__.py if it doesn't exist
     let initPath = thisDir() & "/bindings/generated/python/__init__.py"
     if not fileExists(initPath):
@@ -614,27 +607,27 @@ This package provides Python bindings for the ObiWAN Gemini protocol client and 
 from .obiwan import ObiwanClient, ObiwanServer, Response, Status, checkError, takeError
 
 __all__ = [
-    'ObiwanClient', 
-    'ObiwanServer', 
-    'Response', 
+    'ObiwanClient',
+    'ObiwanServer',
+    'Response',
     'Status',
     'checkError',
     'takeError'
 ]
 """)
-  
+
   # Check if customized Node.js bindings already exist
   let nodePath = thisDir() & "/bindings/generated/node/obiwan.js"
   var generateNode = true
-  
+
   if fileExists(nodePath):
     let nodeContent = readFile(nodePath)
-    if nodeContent.contains("responseHasCertificate") or 
-       nodeContent.contains("responseIsVerified") or 
+    if nodeContent.contains("responseHasCertificate") or
+       nodeContent.contains("responseIsVerified") or
        nodeContent.contains("hasError"):
       echo "Detected customized Node.js wrapper, preserving..."
       generateNode = false
-  
+
   # Generate improved Node.js bindings if needed
   if generateNode:
     echo "Generating Node.js bindings..."
@@ -686,16 +679,16 @@ const Status = {
 const lib = ffi.Library(libPath, {
   // Library initialization
   'initObiwan': ['void', []],
-  
+
   // Error handling
   'hasError': ['bool', []],
   'getLastError': ['string', []],
-  
+
   // Client API
   'createClient': ['pointer', ['int', 'string', 'string']],
   'destroyClient': ['void', ['pointer']],
   'requestUrl': ['pointer', ['pointer', 'string']],
-  
+
   // Response API
   'destroyResponse': ['void', ['pointer']],
   'getResponseStatus': ['int', ['pointer']],
@@ -704,7 +697,7 @@ const lib = ffi.Library(libPath, {
   'responseHasCertificate': ['bool', ['pointer']],
   'responseIsVerified': ['bool', ['pointer']],
   'responseIsSelfSigned': ['bool', ['pointer']],
-  
+
   // Server API
   'createServer': ['pointer', ['bool', 'bool', 'string', 'string', 'string']],
   'destroyServer': ['void', ['pointer']]
@@ -770,7 +763,7 @@ class ObiwanClient {
     }
 
     const responseHandle = lib.requestUrl(this._handle, url);
-    
+
     if (lib.hasError()) {
       throw new Error(`Request failed: ${lib.getLastError()}`);
     }
@@ -907,7 +900,7 @@ module.exports = {
   takeError
 };"""
     writeFile(nodePath, nodeContent)
-    
+
     # Create package.json if it doesn't exist
     let packagePath = thisDir() & "/bindings/generated/node/package.json"
     if not fileExists(packagePath):
@@ -933,7 +926,7 @@ module.exports = {
     "ffi-napi": "^4.0.3"
   }
 }""")
-    
+
     # Create TypeScript type definitions if they don't exist
     let dtsPath = thisDir() & "/bindings/generated/node/obiwan.d.ts"
     if not fileExists(dtsPath):
@@ -973,27 +966,27 @@ export class Response {
    * Status code of the response
    */
   readonly status: number;
-  
+
   /**
    * Meta information from the response
    */
   readonly meta: string;
-  
+
   /**
    * Get the body content
    */
   body(): string | null;
-  
+
   /**
    * Check if the server provided a certificate
    */
   hasCertificate(): boolean;
-  
+
   /**
    * Check if the server certificate is verified
    */
   isVerified(): boolean;
-  
+
   /**
    * Check if the server certificate is self-signed
    */
@@ -1011,18 +1004,18 @@ export class ObiwanClient implements Disposable {
    * @param keyFile Path to client key file (optional)
    */
   constructor(maxRedirects?: number, certFile?: string, keyFile?: string);
-  
+
   /**
    * Make a request to a Gemini server
    * @param url The Gemini URL to request
    */
   request(url: string): Response;
-  
+
   /**
    * Close the client and free resources
    */
   close(): void;
-  
+
   /**
    * Symbol.dispose implementation for resource cleanup
    */
@@ -1048,12 +1041,12 @@ export class ObiwanServer implements Disposable {
     keyFile?: string,
     sessionId?: string
   );
-  
+
   /**
    * Close the server and free resources
    */
   close(): void;
-  
+
   /**
    * Symbol.dispose implementation for resource cleanup
    */
@@ -1069,7 +1062,7 @@ export function checkError(): boolean;
  * Get the error message from the last operation that failed
  */
 export function takeError(): string;""")
-  
+
   echo "Bindings generation complete. Files generated in bindings/generated/"
 
 task testhelp, "Show information about test tasks":
