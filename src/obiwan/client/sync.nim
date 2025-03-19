@@ -5,21 +5,29 @@
 ## for easier setup and maintenance.
 ##
 ## Usage:
-##   ```
-##   ./build/client [url] [config_file]
-##   ```
-## Where:
-##   - url: The Gemini URL to request (defaults to "gemini://geminiprotocol.net/")
-##   - config_file: Optional path to TOML configuration file
+##   client [options] [<url>]
 ##
-## Configuration is loaded from:
-## 1. The specified config file or
-## 2. ./obiwan.toml (current directory) or
-## 3. ~/.config/obiwan/config.toml (user config) or
+## Options:
+##   -h --help               Show this help screen
+##   -v --verbose            Increase verbosity level
+##   -c --config=<file>      Use specific config file
+##   -r --redirects=<num>    Maximum number of redirects [default: 5]
+##   --cert=<file>           Client certificate file for authentication
+##   --key=<file>            Client key file for authentication
+##   --version               Show version information
+##
+## Arguments:
+##   <url>                   URL to request [default: gemini://geminiprotocol.net/]
+##
+## Configuration is loaded from (in order):
+## 1. The specified config file with --config
+## 2. ./obiwan.toml (current directory)
+## 3. ~/.config/obiwan/config.toml (user config)
 ## 4. /etc/obiwan/config.toml (system config)
 ## 5. Default values if no config file is found
 ##
-## To use client certificates, specify them in the config file:
+## Client certificates can be specified via command line (--cert and --key)
+## or in the config file:
 ## ```toml
 ## [client]
 ## cert_file = "client-cert.pem"
@@ -29,17 +37,60 @@
 import os
 import "../../obiwan"
 import "../config"
+import docopt
+
+const doc = """
+ObiWAN Gemini Client
+
+Usage:
+  client [options] [<url>]
+
+Options:
+  -h --help               Show this help screen
+  -v --verbose            Increase verbosity level
+  -c --config=<file>      Use specific config file
+  -r --redirects=<num>    Maximum number of redirects [default: 5]
+  --cert=<file>           Client certificate file for authentication
+  --key=<file>            Client key file for authentication
+  --version               Show version information
+
+Arguments:
+  <url>                   URL to request [default: gemini://geminiprotocol.net/]
+"""
+
+const version = "ObiWAN Gemini Client v0.5.0"
 
 # Main application code
 when isMainModule:
-  # Parse command line arguments
-  let
-    url = if paramCount() >= 1: paramStr(1) else: "gemini://geminiprotocol.net/"
-    configPath = if paramCount() >= 2: paramStr(2) else: ""
+  # Parse command line arguments with docopt
+  let args = docopt(doc, version=version)
 
   try:
+    # Get configuration file path from arguments
+    let configPath = if args["--config"]: $args["--config"] else: ""
+    
     # Load configuration
     var config = loadOrCreateConfig(configPath)
+    
+    # Override configuration with command line arguments
+    if args["--verbose"]:
+      config.log.level = 2  # Increase verbosity
+    
+    if args["--redirects"]:
+      try:
+        config.client.maxRedirects = parseInt($args["--redirects"])
+      except ValueError:
+        echo "Warning: Invalid redirect count, using default"
+    
+    # Certificate settings override from command line
+    if args["--cert"]:
+      config.client.certFile = $args["--cert"]
+    
+    if args["--key"]:
+      config.client.keyFile = $args["--key"]
+    
+    # Get URL from arguments
+    let url = if args["<url>"]: $args["<url>"] else: "gemini://geminiprotocol.net/"
     
     # Initialize logging
     initializeLogging(config)

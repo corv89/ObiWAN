@@ -5,24 +5,58 @@
 ## for easier setup and maintenance.
 ##
 ## Usage:
-##   ```
-##   ./build/async_server [config_file] [-6]
-##   ```
-## Where:
-##   - config_file: Optional path to TOML configuration file (default: searches for obiwan.toml)
-##   - -6: Optional flag to force IPv6 mode regardless of config file
+##   async_server [options]
 ##
-## Configuration is loaded from:
-## 1. The specified config file or
-## 2. ./obiwan.toml (current directory) or
-## 3. ~/.config/obiwan/config.toml (user config) or
+## Options:
+##   -h --help               Show this help screen
+##   -v --verbose            Increase verbosity level
+##   -c --config=<file>      Use specific config file
+##   -p --port=<port>        Port to listen on [default: 1965]
+##   -a --address=<addr>     Address to bind to [default: 0.0.0.0]
+##   -6 --ipv6               Use IPv6 instead of IPv4
+##   -r --reuse-addr         Allow reuse of local addresses [default: true]
+##   --reuse-port            Allow multiple bindings to same port
+##   --cert=<file>           Server certificate file [default: cert.pem]
+##   --key=<file>            Server key file [default: privkey.pem]
+##   --docroot=<dir>         Document root directory [default: ./content]
+##   --version               Show version information
+##
+## Configuration is loaded from (in order):
+## 1. The specified config file with --config
+## 2. ./obiwan.toml (current directory)
+## 3. ~/.config/obiwan/config.toml (user config)
 ## 4. /etc/obiwan/config.toml (system config)
 ## 5. Default values if no config file is found
+## Command line options override values from config files.
 
 import os
 import asyncdispatch
 import "../../obiwan"
 import "../config"
+import docopt
+
+const doc = """
+ObiWAN Async Gemini Server
+
+Usage:
+  async_server [options]
+
+Options:
+  -h --help               Show this help screen
+  -v --verbose            Increase verbosity level
+  -c --config=<file>      Use specific config file
+  -p --port=<port>        Port to listen on [default: 1965]
+  -a --address=<addr>     Address to bind to [default: 0.0.0.0]
+  -6 --ipv6               Use IPv6 instead of IPv4
+  -r --reuse-addr         Allow reuse of local addresses [default: true]
+  --reuse-port            Allow multiple bindings to same port
+  --cert=<file>           Server certificate file [default: cert.pem]
+  --key=<file>            Server key file [default: privkey.pem]
+  --docroot=<dir>         Document root directory [default: ./content]
+  --version               Show version information
+"""
+
+const version = "ObiWAN Async Gemini Server v0.5.0"
 
 proc handleRequest(request: AsyncRequest): Future[void] {.async.} =
   ## Handles incoming Gemini requests asynchronously.
@@ -59,21 +93,53 @@ proc handleRequest(request: AsyncRequest): Future[void] {.async.} =
 
 # Main application code
 when isMainModule:
-  # Parse command line arguments
-  var configPath = if paramCount() >= 1 and not (paramStr(1) == "-6"): paramStr(1) else: ""
-  var forceIPv6 = paramCount() >= 1 and paramStr(1) == "-6" or
-                  paramCount() >= 2 and paramStr(2) == "-6"
-  
   try:
+    # Parse command line arguments with docopt
+    let args = docopt(doc, version=version)
+    
+    # Get configuration file path from arguments
+    let configPath = if args["--config"]: $args["--config"] else: ""
+    
     # Load configuration
     var config = loadOrCreateConfig(configPath)
     
+    # Override configuration with command line arguments
+    if args["--verbose"]:
+      config.log.level = 2  # Increase verbosity
+    
+    if args["--port"]:
+      try:
+        config.server.port = parseInt($args["--port"])
+      except ValueError:
+        echo "Warning: Invalid port number, using default"
+    
+    if args["--address"]:
+      config.server.address = $args["--address"]
+    
+    # IPv6 setting
+    if args["--ipv6"]:
+      config.server.useIPv6 = true
+    
+    # Reuse flags
+    if args["--reuse-addr"] != nil:  # Check if explicitly set
+      config.server.reuseAddr = args["--reuse-addr"].to(bool)
+    
+    if args["--reuse-port"]:
+      config.server.reusePort = true
+    
+    # Certificate settings
+    if args["--cert"]:
+      config.server.certFile = $args["--cert"]
+    
+    if args["--key"]:
+      config.server.keyFile = $args["--key"]
+    
+    # Document root
+    if args["--docroot"]:
+      config.server.docRoot = $args["--docroot"]
+    
     # Initialize logging
     initializeLogging(config)
-    
-    # Override IPv6 setting if -6 flag is provided
-    if forceIPv6:
-      config.server.useIPv6 = true
     
     # Output startup information
     echo "\nObiWAN Async Gemini Server"

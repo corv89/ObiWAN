@@ -67,7 +67,7 @@ proc defaultConfig*(): Config =
       keyFile: "",
       maxRedirects: 5,
       timeout: 30,
-      userAgent: "ObiWAN/0.4.0"
+      userAgent: "ObiWAN/0.5.0"
     ),
     log: LogConfig(
       level: 0,             # Default to minimal logging

@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.4.0"
+version       = "0.5.0"
 author        = "Corvin Wimmer"
 description   = "A lightweight Gemini protocol client and server library in Nim."
 license       = "All Rights Reserved"
@@ -12,6 +12,7 @@ requires "nim >= 2.2.2"
 requires "nimcrypto >= 0.6.2"
 requires "genny >= 0.1.0"
 requires "parsetoml >= 0.7.2"
+requires "docopt >= 0.7.0"
 
 task client, "Build sync client":
   exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/client src/obiwan/client/sync.nim"

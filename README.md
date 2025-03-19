@@ -97,42 +97,79 @@ First, build all the programs:
 nimble buildall
 ```
 
-Then you can run:
+Then you can run with the new command-line interface:
 
 ```bash
+# Show client help
+./build/client --help
+
 # Run synchronous client
 ./build/client gemini://geminiprotocol.net/
 
-# Run asynchronous client
-./build/async_client gemini://geminiprotocol.com/
+# Run asynchronous client with options
+./build/async_client --verbose gemini://geminiprotocol.com/
 
-# Run synchronous server (IPv4)
-./build/server 
+# Run synchronous server with options
+./build/server --port=1966 --docroot=./my-content
 
-# Run synchronous server with IPv6 support
-./build/server -6
+# Run server with IPv6 support
+./build/server --ipv6
 
-# Run asynchronous server (IPv4)
-./build/async_server
-
-# Run asynchronous server with IPv6 support
-./build/async_server -6
+# Run asynchronous server with certificate options
+./build/async_server --cert=mycert.pem --key=mykey.pem
 ```
 
-### Configuration
+### Command Line Options
 
-ObiWAN now supports TOML configuration files. By default, it looks for a file named `obiwan.toml` in:
+ObiWAN provides a comprehensive command-line interface for both clients and servers:
+
+#### Client Options
+
+```
+Options:
+  -h --help               Show this help screen
+  -v --verbose            Increase verbosity level
+  -c --config=<file>      Use specific config file
+  -r --redirects=<num>    Maximum number of redirects [default: 5]
+  --cert=<file>           Client certificate file for authentication
+  --key=<file>            Client key file for authentication
+  --version               Show version information
+```
+
+#### Server Options
+
+```
+Options:
+  -h --help               Show this help screen
+  -v --verbose            Increase verbosity level
+  -c --config=<file>      Use specific config file
+  -p --port=<port>        Port to listen on [default: 1965]
+  -a --address=<addr>     Address to bind to [default: 0.0.0.0]
+  -6 --ipv6               Use IPv6 instead of IPv4
+  -r --reuse-addr         Allow reuse of local addresses [default: true]
+  --reuse-port            Allow multiple bindings to same port
+  --cert=<file>           Server certificate file [default: cert.pem]
+  --key=<file>            Server key file [default: privkey.pem]
+  --docroot=<dir>         Document root directory [default: ./content]
+  --version               Show version information
+```
+
+### Configuration Files
+
+ObiWAN supports TOML configuration files. By default, it looks for a file named `obiwan.toml` in:
 
 1. The current directory
 2. `~/.config/obiwan/config.toml`
 3. `/etc/obiwan/config.toml`
 
-You can also specify a config file directly:
+You can also specify a config file using the `--config` option:
 
 ```bash
-./build/server myconfig.toml
-./build/client gemini://example.com/ myconfig.toml
+./build/server --config=myconfig.toml
+./build/client --config=myconfig.toml gemini://example.com/
 ```
+
+Command-line options override values from the configuration file.
 
 Example configuration:
 
@@ -384,9 +421,10 @@ nimble testurl      # URL parsing tests
 - [ ] Improved documentation
 - [x] Vendored mbedTLS 3.6.2
 - [x] TOML configuration file support
-- [ ] Complete server implementation
+- [x] Command-line argument parsing with docopt
+- [ ] Complete server implementation with file serving
 - [ ] CGI support
-- [ ] MIME type support
+- [ ] MIME type detection
 
 ## License
 
