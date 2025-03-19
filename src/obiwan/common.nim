@@ -1,11 +1,11 @@
 ## Common types and protocols
-import uri
 import streams
 import asyncdispatch
 import net
+import obiwan/url
 
 # Export specific symbols from dependency modules
-export uri.Uri, Port
+export Port
 
 type
   # Forward declaration (to be defined in TLS modules)
@@ -102,7 +102,7 @@ type
     ## client certificate information (if provided), and the client socket.
     ##
     ## Use the concrete types `Request` and `AsyncRequest` in application code.
-    url*: Uri ## Requested URL, can be used to handle virtual hosts, resources, and query parameters
+    url*: Url ## Requested URL, can be used to handle virtual hosts, resources, and query parameters
     certificate*: X509Certificate ## Client's X.509 certificate (nil if not provided)
     verification*: int ## Certificate verification result (0 = verified, other values indicate verification issues)
     client*: SocketType ## Client socket connection

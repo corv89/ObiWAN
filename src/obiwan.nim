@@ -6,11 +6,13 @@ import asyncnet
 import random
 import nimcrypto
 import strutils
-import uri
 import streams
 import net
 import posix
 import os # For fileExists
+
+# URL handling
+import obiwan/url
 
 # Core components
 import obiwan/common
@@ -338,9 +340,9 @@ proc newAsyncObiwanClient*(maxRedirects = 5; certFile = "";
 proc loadUrl(client: ObiwanClient | AsyncObiwanClient; url: string): Future[
     Response | AsyncResponse] {.multisync.} =
   ## Internal helper function to load a URL
-  let uri = parseUri(url)
-  let port = if uri.port == "": 1965 else: parseInt(uri.port)
-  if uri.scheme != "gemini":
+  let webbyUrl = parseUrl(url)
+  let port = geminiPort(webbyUrl)
+  if not validateGeminiUrl(webbyUrl):
     raise newException(ObiwanError, url & ": scheme not supported")
 
   # Use the context directly as MbedtlsSslContext
@@ -348,16 +350,16 @@ proc loadUrl(client: ObiwanClient | AsyncObiwanClient; url: string): Future[
 
   when client is AsyncObiwanClient:
     result = AsyncResponse(client: client)
-    client.socket = await tlsAsyncSocket.dial(uri.hostname, port)
+    client.socket = await tlsAsyncSocket.dial(webbyUrl.hostname, port)
     await tlsAsyncSocket.wrapConnectedSocket(ctx, client.socket,
-        tlsAsyncSocket.handshakeAsClient, uri.hostname)
+        tlsAsyncSocket.handshakeAsClient, webbyUrl.hostname)
     # send data now to force TLS handshake to complete
     await client.socket.send(url & "\r\n")
   else:
     result = Response(client: client)
-    client.socket = tlsSocket.dial(uri.hostname, port)
+    client.socket = tlsSocket.dial(webbyUrl.hostname, port)
     tlsSocket.wrapConnectedSocket(ctx, client.socket,
-        tlsSocket.handshakeAsClient, uri.hostname)
+        tlsSocket.handshakeAsClient, webbyUrl.hostname)
     # send data now to force TLS handshake to complete
     discard client.socket.send(url & "\r\n")
 
@@ -414,7 +416,9 @@ proc request*(client: ObiwanClient | AsyncObiwanClient; url: string): Future[
   result = await client.loadUrl(url)
   for i in 1..client.maxRedirects:
     if result.status == Status.Redirect or result.status == Status.TempRedirect:
-      url = $combine(parseUri(url), parseUri(result.meta))
+      let baseUrl = parseUrl(url)
+      let targetUrl = parseUrl(result.meta)
+      url = $combineUrl(baseUrl, targetUrl)
       result = await client.loadUrl(url)
     else:
       return
@@ -667,7 +671,7 @@ proc serve*(server: ObiwanServer; port: int; callback: proc(request: Request);
       debug("Received request: " & line)
 
       # Parse the request (Gemini URL)
-      let url = parseUri(line)
+      let url = parseUrl(line)
 
       # Get client certificate if available
       let sslCtx = clientSocket.getSslHandle()
@@ -846,7 +850,7 @@ proc handleAsyncClient(server: AsyncObiwanServer; clientSocket: AsyncSocket;
     debug("Received async request: " & line)
 
     # Parse the request (Gemini URL)
-    let url = parseUri(line)
+    let url = parseUrl(line)
 
     # Get client certificate if available
     let sslCtx = socket.getSslHandle()
