@@ -48,7 +48,7 @@ proc handleRequest(request: Request) =
   # Basic validation helpers
   let isGeminiScheme = scheme == "gemini"
   let isLocalhost = hostname == "localhost" or hostname == "127.0.0.1" or
-      hostname == "::1"
+      hostname == "::1" or hostname == "[::1]"
   let isTestPort = port == $TestPort or port == "" # Empty means default port
   let rawUrl = $url
 
@@ -104,7 +104,7 @@ proc handleRequest(request: Request) =
     return
 
   # 2. Check hostname/proxy attempts
-  if not isLocalhost:
+  if not (isLocalhost or hostname == "::1" or hostname == "[::1]"):
     # Reject proxy attempts to other hosts
     request.respond(ProxyRefused, "This server doesn't support proxying to other hosts")
     return
@@ -190,14 +190,14 @@ TLS Version: TLS 1.3 (assumed)
   # Redirect test
   elif path == "/redirect":
     # Test redirect handling
-    let target = if query.len > 0: query else: "/"
+    let target = if $query != "": $query else: "/"
     request.respond(Redirect, fmt"gemini://localhost:{TestPort}/{target}")
     return
 
   # Redirect loop test
   elif path == "/redirect-loop":
     # Test redirect loop handling
-    let count = if query.len > 0: parseInt(query) else: 0
+    let count = if $query != "": parseInt($query) else: 0
     if count < 10:
       request.respond(Redirect, fmt"gemini://localhost:{TestPort}/redirect-loop?{count+1}")
     else:
@@ -262,7 +262,7 @@ when isMainModule:
     # Get command line arguments
     var useIPv6 = false
     for i in 1..paramCount():
-      if paramStr(i) == "-6":
+      if paramStr(i) == "-6" or paramStr(i) == "--ipv6":
         useIPv6 = true
         break
 
