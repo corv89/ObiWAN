@@ -44,6 +44,7 @@
 #define MBEDTLS_SSL_CLI_C
 #define MBEDTLS_SSL_SRV_C
 #define MBEDTLS_SSL_TLS_C
+#define MBEDTLS_SSL_MAX_FRAGMENT_LENGTH   /* Enable max_fragment_length extension */
 #define MBEDTLS_X509_CRT_PARSE_C
 #define MBEDTLS_X509_USE_C
 
@@ -88,7 +89,7 @@
 #define MBEDTLS_ECP_FIXED_POINT_OPTIM 0
 #define MBEDTLS_MPI_WINDOW_SIZE 1
 #define MBEDTLS_MPI_MAX_SIZE 64        /* 512 bits, sufficient for 256-bit curves */
-#define MBEDTLS_SSL_MAX_CONTENT_LEN 8192  /* Reduced from default 16KB */
+#define MBEDTLS_SSL_MAX_CONTENT_LEN 2048  /* Optimized for Gemini protocol's small message size */
 
 /* TLS 1.3 Ciphersuites - only ChaCha20-Poly1305 */
 #define MBEDTLS_SSL_TLS1_3_CHACHA20_POLY1305_SHA256  /* Required for TLS 1.3 ChaCha20-Poly1305 */

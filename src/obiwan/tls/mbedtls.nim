@@ -64,6 +64,12 @@ var
   MBEDTLS_TLS_AES_128_GCM_SHA256* = 0x1301.cint
   MBEDTLS_TLS_AES_256_GCM_SHA384* = 0x1302.cint
   MBEDTLS_TLS_CHACHA20_POLY1305_SHA256* = 0x1303.cint
+  
+  # Max fragment length constants
+  MBEDTLS_SSL_MAX_FRAG_LEN_512* = 1.cint
+  MBEDTLS_SSL_MAX_FRAG_LEN_1024* = 2.cint
+  MBEDTLS_SSL_MAX_FRAG_LEN_2048* = 3.cint
+  MBEDTLS_SSL_MAX_FRAG_LEN_4096* = 4.cint
 
 # Core SSL functions
 proc mbedtls_ssl_init*(ctx: ptr mbedtls_ssl_context) {.mbedtls.}
@@ -76,6 +82,8 @@ proc mbedtls_ssl_conf_authmode*(conf: ptr mbedtls_ssl_config,
     authmode: cint) {.mbedtls.}
 proc mbedtls_ssl_conf_ciphersuites*(conf: ptr mbedtls_ssl_config,
     ciphersuites: ptr cint) {.mbedtls.}
+proc mbedtls_ssl_conf_max_frag_len*(conf: ptr mbedtls_ssl_config, 
+    fragment_length: cint): cint {.mbedtls.}
 proc mbedtls_ssl_setup*(ssl: ptr mbedtls_ssl_context,
     conf: ptr mbedtls_ssl_config): cint {.mbedtls.}
 proc mbedtls_ssl_set_hostname*(ssl: ptr mbedtls_ssl_context,

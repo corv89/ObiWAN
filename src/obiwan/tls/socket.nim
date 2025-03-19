@@ -119,6 +119,13 @@ proc newContext*(): MbedtlsSslContext =
   ]
   debug("Setting TLS 1.3 ChaCha20-Poly1305 as the only ciphersuite")
   mbedtls.mbedtls_ssl_conf_ciphersuites(addr result.config, addr ciphersuites[0])
+  
+  # Configure max fragment length for Gemini protocol (requests limited to 1024 bytes)
+  debug("Setting max fragment length to 2048 bytes")
+  let fragResult = mbedtls.mbedtls_ssl_conf_max_frag_len(addr result.config, 
+                                                         mbedtls.MBEDTLS_SSL_MAX_FRAG_LEN_2048)
+  if fragResult != 0:
+    debug("Warning: Failed to set max fragment length, continuing anyway: " & $fragResult)
 
   # Initialize certificate containers
   mbedtls.mbedtls_x509_crt_init(addr result.cacert)
