@@ -152,3 +152,20 @@ suite "URL Parsing Tests":
     check url.scheme == "gemini"
     check url.hostname == "example.com"
     check url.path == "/~user/file with spaces.txt"
+  
+  test "IPv6 address unbracketing":
+    # Test the unbracketed function for IPv6 addresses
+    check unbracketed("[::1]") == "::1"
+    check unbracketed("[2001:db8::8a2e:370:7334]") == "2001:db8::8a2e:370:7334"
+    
+    # No brackets - should return unchanged
+    check unbracketed("127.0.0.1") == "127.0.0.1"
+    check unbracketed("::1") == "::1"
+    check unbracketed("localhost") == "localhost"
+    
+    # Test with empty string
+    check unbracketed("") == ""
+    
+    # Test with malformed brackets
+    check unbracketed("[::1") == "[::1"
+    check unbracketed("::1]") == "::1]"

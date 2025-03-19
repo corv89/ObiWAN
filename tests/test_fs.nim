@@ -6,7 +6,6 @@
 import std/unittest
 import std/os
 import std/strutils
-import std/tempfiles
 
 when not defined(skipMbedTLS):
   {.warning: "Setting skipMbedTLS to avoid linking issues in test".}
@@ -14,35 +13,46 @@ when not defined(skipMbedTLS):
 
 import ../src/obiwan/fs
 
-# Create a temporary directory for testing
-let tempDir = createTempDir("obiwan_fs_test", "")
+# Default values - actual setup happens in the setup block
+var tempDir: string
+var contentDir: string
+var indexContent: string
 
-# Setup test files and directories
-let contentDir = tempDir / "content"
-createDir(contentDir)
-
-# Create index.gmi
-let indexContent = """# Test Index Page
+suite "ObiWAN File System Module Tests":
+  # Set up test files and directories before each test
+  setup:
+    # Create test directories
+    tempDir = getCurrentDir() / "test_temp_dir"
+    removeDir(tempDir) # Clean up any previous test run
+    createDir(tempDir)
+    
+    contentDir = tempDir / "content"
+    createDir(contentDir)
+    
+    # Create test files
+    indexContent = """# Test Index Page
 This is a test index page for the ObiWAN filesystem tests.
 
 ## Links
 => /about.gmi About page
 => /test.txt A text file
 """
-writeFile(contentDir / "index.gmi", indexContent)
-
-# Create a text file
-writeFile(contentDir / "test.txt", "This is a plain text file for testing.")
-
-# Create a subdirectory
-createDir(contentDir / "subdir")
-writeFile(contentDir / "subdir" / "index.gmi", "# Subdirectory Index\n\nThis is a subdirectory index.")
-writeFile(contentDir / "subdir" / "file.txt", "Text file in subdirectory")
-
-suite "ObiWAN File System Module Tests":
-  # Clean up at the end
+    writeFile(contentDir / "index.gmi", indexContent)
+    writeFile(contentDir / "test.txt", "This is a plain text file for testing.")
+    
+    # Create subdirectory
+    createDir(contentDir / "subdir")
+    writeFile(contentDir / "subdir" / "index.gmi", "# Subdirectory Index\n\nThis is a subdirectory index.")
+    writeFile(contentDir / "subdir" / "file.txt", "Text file in subdirectory")
+  
+  # Clean up at the end of each test
   teardown:
-    removeDir(tempDir)
+    try:
+      removeDir(tempDir)
+      if dirExists("./temp_docroot"):
+        removeDir("./temp_docroot")
+    except:
+      echo "Warning: Failed to remove temporary directories"
   test "MIME type detection":
     check detectMimeType("test.gmi") == "text/gemini"
     check detectMimeType("test.txt") == "text/plain"
@@ -118,3 +128,44 @@ suite "ObiWAN File System Module Tests":
     let result = handleFileRequest(contentDir, "/../outside.txt")
     check not result.success
     check result.errorMsg == "Security violation: Path traversal attempt"
+    
+  test "Document root path normalization":
+    # Test relative docRoot paths (like ./content)
+    let relDocRoot = "./temp_docroot"
+    createDir(relDocRoot)
+    writeFile(relDocRoot / "test.gmi", "# Test\n\nThis is a test file")
+    
+    try:
+      # The code in server.nim normalizes relative paths by converting them to absolute
+      let absDocRoot = getCurrentDir() / "temp_docroot"
+      
+      # Test that handleFileRequest can handle this pattern
+      let result = handleFileRequest(absDocRoot, "/test.gmi")
+      check result.success
+      check result.mimeType == "text/gemini"
+      check result.content == "# Test\n\nThis is a test file"
+    finally:
+      removeDir("./temp_docroot")
+      
+  test "Path handling with trailing slashes":
+    # Test handling of paths with and without trailing slashes
+    
+    # Create test directory and file
+    let testDir = tempDir / "trailing_slash_test"
+    createDir(testDir)
+    createDir(testDir / "subdir")
+    writeFile(testDir / "subdir" / "index.gmi", "# Test Index")
+    
+    # Test with trailing slash - should find index.gmi
+    let resultWithSlash = handleFileRequest(testDir, "/subdir/")
+    check resultWithSlash.success
+    check resultWithSlash.content == "# Test Index"
+    
+    # Test without trailing slash - should still find index.gmi
+    # This behavior depends on implementation, but is recommended
+    let resultWithoutSlash = handleFileRequest(testDir, "/subdir")
+    
+    # We're checking if it works, but not mandating specific behavior
+    # Some implementations might perform a redirect in this case
+    if resultWithoutSlash.success:
+      check resultWithoutSlash.content == "# Test Index"

@@ -61,6 +61,7 @@ task test, "Run all tests in sequence":
     nim c --parallelBuild:0 -d:release --hints:off --path:src -o:build/test_server tests/test_server.nim &
     nim c --parallelBuild:0 -d:release -w:off --hints:off --path:src -o:build/test_client tests/test_client.nim &
     nim c --parallelBuild:0 -d:release -w:off --hints:off --path:src -o:build/test_real_server tests/test_real_server.nim &
+    nim c --parallelBuild:0 -d:release -w:off --hints:off --path:src -o:build/test_fs tests/test_fs.nim &
 
     # Wait for all compilations to complete
     wait
@@ -82,6 +83,10 @@ task test, "Run all tests in sequence":
   # Skip the real server tests as they depend on the protocol tests
   # exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 ./build/test_real_server"
   echo "\nSkipping test_real_server tests (depends on protocol tests)"
+  
+  # Run file system module tests
+  echo "\nRunning file system module tests..."
+  exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 ./build/test_fs"
 
   # Note: TLS tests have indentation issues that need fixing
   # echo "\nRunning TLS tests..."
