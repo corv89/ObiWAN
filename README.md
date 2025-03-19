@@ -404,12 +404,6 @@ src/
 │   │   ├── mbedtls.nim     # C bindings
 │   │   ├── socket.nim      # Base socket
 │   │   └── async_socket.nim # Async socket
-│   ├── client/             # Legacy client implementations
-│   │   ├── sync.nim        # Synchronous client
-│   │   └── async.nim       # Asynchronous client
-│   └── server/             # Legacy server implementations
-│       ├── sync.nim        # Synchronous server
-│       └── async.nim       # Asynchronous server
 ```
 
 ### Running Tests
