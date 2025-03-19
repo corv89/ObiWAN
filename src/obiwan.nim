@@ -348,18 +348,21 @@ proc loadUrl(client: ObiwanClient | AsyncObiwanClient; url: string): Future[
   # Use the context directly as MbedtlsSslContext
   let ctx = MbedtlsSslContext(client.sslContext)
 
+  # Remove brackets from IPv6 addresses for socket connections
+  let hostname = unbracketed(webbyUrl.hostname)
+  
   when client is AsyncObiwanClient:
     result = AsyncResponse(client: client)
-    client.socket = await tlsAsyncSocket.dial(webbyUrl.hostname, port)
+    client.socket = await tlsAsyncSocket.dial(hostname, port)
     await tlsAsyncSocket.wrapConnectedSocket(ctx, client.socket,
-        tlsAsyncSocket.handshakeAsClient, webbyUrl.hostname)
+        tlsAsyncSocket.handshakeAsClient, hostname)
     # send data now to force TLS handshake to complete
     await client.socket.send(url & "\r\n")
   else:
     result = Response(client: client)
-    client.socket = tlsSocket.dial(webbyUrl.hostname, port)
+    client.socket = tlsSocket.dial(hostname, port)
     tlsSocket.wrapConnectedSocket(ctx, client.socket,
-        tlsSocket.handshakeAsClient, webbyUrl.hostname)
+        tlsSocket.handshakeAsClient, hostname)
     # send data now to force TLS handshake to complete
     discard client.socket.send(url & "\r\n")
 

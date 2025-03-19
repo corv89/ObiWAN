@@ -62,6 +62,13 @@ proc geminiPort*(url: Url): int =
   else:
     return parseInt(url.port)
 
+proc unbracketed*(hostname: string): string =
+  ## Remove IPv6 brackets from hostname if present
+  ## This is useful when passing a hostname to socket functions
+  if hostname.startsWith('[') and hostname.endsWith(']') and hostname.len > 2:
+    return hostname[1..^2]  # Remove first and last character (the brackets)
+  return hostname
+
 proc combineUrl*(baseUrl, target: Url): Url =
   ## Combine two URLs for handling relative redirects
   ## This is particularly useful for handling Gemini redirects
