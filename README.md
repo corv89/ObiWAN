@@ -93,7 +93,7 @@ openssl req -x509 -newkey rsa:4096 -keyout certs/privkey.pem -out certs/cert.pem
 First, build all the programs:
 
 ```bash
-# Build all clients and servers
+# Build both client and server
 nimble buildall
 ```
 

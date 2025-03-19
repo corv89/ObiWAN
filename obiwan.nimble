@@ -15,10 +15,12 @@ requires "parsetoml >= 0.7.2"
 requires "docopt >= 0.7.0"
 
 task client, "Build ObiWAN client":
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/obiwan-client src/obiwan/client.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-client src/obiwan/client.nim"
+  exec "strip build/obiwan-client"
 
 task server, "Build ObiWAN server":
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/obiwan-server src/obiwan/server.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-server src/obiwan/server.nim"
+  exec "strip build/obiwan-server"
 
 task buildall, "Build all":
   # First build mbedTLS if not already built
@@ -29,8 +31,10 @@ task buildall, "Build all":
 
   # Now build the ObiWAN components with release mode, size optimizations, and LTO
   echo "Building unified client and server..."
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/obiwan-client src/obiwan/client.nim"
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/obiwan-server src/obiwan/server.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-client src/obiwan/client.nim"
+  exec "strip build/obiwan-client"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-server src/obiwan/server.nim"
+  exec "strip build/obiwan-server"
 
 task test, "Run all tests in sequence":
   # First build mbedTLS if not already built
