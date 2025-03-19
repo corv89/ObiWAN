@@ -29,8 +29,8 @@ task buildall, "Build all":
 
   # Now build the ObiWAN components with release mode, size optimizations, and LTO
   echo "Building unified client and server..."
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/gemini src/obiwan/client.nim"
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/gemini-server src/obiwan/server.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/obiwan-client src/obiwan/client.nim"
+  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -o:build/obiwan-server src/obiwan/server.nim"
 
 task test, "Run all tests in sequence":
   # First build mbedTLS if not already built
