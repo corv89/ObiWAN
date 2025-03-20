@@ -165,16 +165,10 @@ proc loadIdentityFile*(client: ObiwanClient | AsyncObiwanClient; certFile,
   # Parse the key - direct approach
   debug("Loading private key from: " & keyFile)
 
-  # Use unified function for platform-specific key file parsing
   let ret2 =
-    when defined(isMacOS):
-      # macOS requires 5 parameters
-      mbedtls.mbedtls_pk_parse_keyfile(
-        addr ctx.key, keyFile, nil,
-        mbedtls.mbedtls_ctr_drbg_random, addr ctx.ctr_drbg)
-    else:
-      # Linux only requires 3 parameters
-      mbedtls.mbedtls_pk_parse_keyfile(addr ctx.key, keyFile, nil)
+    mbedtls.mbedtls_pk_parse_keyfile(
+      addr ctx.key, keyFile, nil,
+      mbedtls.mbedtls_ctr_drbg_random, addr ctx.ctr_drbg)
 
   if ret2 != 0:
     # Get a more detailed error message
@@ -350,7 +344,7 @@ proc loadUrl(client: ObiwanClient | AsyncObiwanClient; url: string): Future[
 
   # Remove brackets from IPv6 addresses for socket connections
   let hostname = unbracketed(webbyUrl.hostname)
-  
+
   when client is AsyncObiwanClient:
     result = AsyncResponse(client: client)
     client.socket = await tlsAsyncSocket.dial(hostname, port)
