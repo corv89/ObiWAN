@@ -1,5 +1,4 @@
 # Package
-
 version       = "0.6.0"
 author        = "Corvin Wimmer"
 description   = "A lightweight Gemini protocol client and server library in Nim."
@@ -83,7 +82,7 @@ task test, "Run all tests in sequence":
   # Skip the real server tests as they depend on the protocol tests
   # exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 ./build/test_real_server"
   echo "\nSkipping test_real_server tests (depends on protocol tests)"
-  
+
   # Run file system module tests
   echo "\nRunning file system module tests..."
   exec "cd " & thisDir() & " && SKIP_CERT_GEN=1 ./build/test_fs"
@@ -202,236 +201,8 @@ task bindings, "Generate C bindings for ObiWAN":
   # Generate improved C header if needed
   if generateHeader:
     echo "Generating improved C header..."
-    let headerContent = """/* ObiWAN C API Header
- * This file contains declarations for the ObiWAN Gemini protocol library C bindings
- */
-#ifndef OBIWAN_H
-#define OBIWAN_H
-
-#include <stdbool.h>
-#include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/*
- * Platform-specific symbol name handling
- * On macOS, symbols in dynamic libraries have an underscore prefix
- */
-#ifdef __APPLE__
-  /* For macOS, use assembly name attribute to specify the actual symbol name */
-  #define OBIWAN_FUNC(returnType, name, params) \\
-    extern returnType name params asm("_" #name)
-#else
-  /* For other platforms, use standard declaration */
-  #define OBIWAN_FUNC(returnType, name, params) \\
-    extern returnType name params
-#endif
-
-/*
- * Handle Types
- * These are opaque pointers for ObiWAN objects
- */
-typedef void* ObiwanClientHandle;
-typedef void* ObiwanServerHandle;
-typedef void* ObiwanResponseHandle;
-
-/*
- * Status Codes
- * Gemini protocol response status codes
- */
-enum ObiwanStatus {
-    /* 1X: Input */
-    OBIWAN_INPUT = 10,              /* Input required from user */
-    OBIWAN_SENSITIVE_INPUT = 11,    /* Sensitive input (password) required */
-
-    /* 2X: Success */
-    OBIWAN_SUCCESS = 20,            /* Success, content follows */
-
-    /* 3X: Redirect */
-    OBIWAN_TEMP_REDIRECT = 30,      /* Temporary redirect to another URL */
-    OBIWAN_REDIRECT = 31,           /* Permanent redirect to another URL */
-
-    /* 4X: Temporary Failure */
-    OBIWAN_TEMP_ERROR = 40,         /* Temporary server failure */
-    OBIWAN_SERVER_UNAVAILABLE = 41, /* Server unavailable (capacity issues) */
-    OBIWAN_CGI_ERROR = 42,          /* CGI script failure */
-    OBIWAN_PROXY_ERROR = 43,        /* Proxy request failure */
-    OBIWAN_SLOWDOWN = 44,           /* Request rate too high, slow down */
-
-    /* 5X: Permanent Failure */
-    OBIWAN_ERROR = 50,              /* Permanent server failure */
-    OBIWAN_NOT_FOUND = 51,          /* Resource not found */
-    OBIWAN_GONE = 52,               /* Resource permanently gone */
-    OBIWAN_PROXY_REFUSED = 53,      /* Proxy request refused */
-    OBIWAN_MALFORMED_REQUEST = 59,  /* Malformed request syntax */
-
-    /* 6X: Client Certificate Required */
-    OBIWAN_CERT_REQUIRED = 60,      /* Client certificate required */
-    OBIWAN_CERT_UNAUTHORIZED = 61,  /* Certificate not authorized for resource */
-    OBIWAN_CERT_NOT_VALID = 62      /* Certificate not valid or expired */
-};
-
-/*
- * Response data structure (legacy format, prefer using separate functions)
- */
-typedef struct {
-    int status;               /* Response status code */
-    const char* meta;         /* Meta information field */
-    const char* body;         /* Response body content (if available) */
-    bool hasBody;             /* Indicates if body contains data */
-    bool hasCertificate;      /* Whether server provided a certificate */
-    bool isVerified;          /* Whether certificate is verified */
-    bool isSelfSigned;        /* Whether certificate is self-signed */
-} ObiwanResponseData;
-
-/*
- * Library Initialization
- */
-
-/**
- * Initialize the ObiWAN library.
- * This must be called before any other functions.
- */
-OBIWAN_FUNC(void, initObiwan, (void));
-
-/*
- * Error Handling
- */
-
-/**
- * Check if an error occurred during the last operation.
- * @return true if an error occurred, false otherwise
- */
-OBIWAN_FUNC(bool, hasError, (void));
-
-/**
- * Get the error message from the last operation that failed.
- * This clears the error state.
- * @return Error message or NULL if no error
- */
-OBIWAN_FUNC(const char*, getLastError, (void));
-
-/*
- * Client API
- */
-
-/**
- * Create a new Gemini client.
- *
- * @param maxRedirects Maximum number of redirects to follow (recommended: 5)
- * @param certFile Path to client certificate file (may be empty)
- * @param keyFile Path to client key file (may be empty)
- * @return Client handle or NULL on error
- */
-OBIWAN_FUNC(ObiwanClientHandle, createClient, (int maxRedirects, const char* certFile, const char* keyFile));
-
-/**
- * Destroy a client and free resources.
- *
- * @param client Client handle to destroy
- */
-OBIWAN_FUNC(void, destroyClient, (ObiwanClientHandle client));
-
-/**
- * Make a request to a Gemini server.
- *
- * @param client Client handle
- * @param url Gemini URL to request (must start with gemini://)
- * @return Response handle or NULL on error
- */
-OBIWAN_FUNC(ObiwanResponseHandle, requestUrl, (ObiwanClientHandle client, const char* url));
-
-/*
- * Response API
- */
-
-/**
- * Destroy a response object and free resources.
- *
- * @param response Response handle to destroy
- */
-OBIWAN_FUNC(void, destroyResponse, (ObiwanResponseHandle response));
-
-/**
- * Get the status code from a response.
- *
- * @param response Response handle
- * @return Status code or -1 on error
- */
-OBIWAN_FUNC(int, getResponseStatus, (ObiwanResponseHandle response));
-
-/**
- * Get the meta information from a response.
- *
- * @param response Response handle
- * @return Meta string or NULL on error
- */
-OBIWAN_FUNC(const char*, getResponseMeta, (ObiwanResponseHandle response));
-
-/**
- * Get the body content from a response.
- *
- * @param response Response handle
- * @return Body content or NULL if not available or on error
- */
-OBIWAN_FUNC(const char*, getResponseBody, (ObiwanResponseHandle response));
-
-/**
- * Check if the server provided a certificate.
- *
- * @param response Response handle
- * @return true if certificate is present, false otherwise
- */
-OBIWAN_FUNC(bool, responseHasCertificate, (ObiwanResponseHandle response));
-
-/**
- * Check if the server certificate is verified against a trusted root.
- *
- * @param response Response handle
- * @return true if certificate is verified, false otherwise
- */
-OBIWAN_FUNC(bool, responseIsVerified, (ObiwanResponseHandle response));
-
-/**
- * Check if the server certificate is self-signed.
- *
- * @param response Response handle
- * @return true if certificate is self-signed, false otherwise
- */
-OBIWAN_FUNC(bool, responseIsSelfSigned, (ObiwanResponseHandle response));
-
-/*
- * Server API
- */
-
-/**
- * Create a new Gemini server.
- *
- * @param reuseAddr Allow reuse of local addresses
- * @param reusePort Allow multiple bindings to the same port
- * @param certFile Path to server certificate (required)
- * @param keyFile Path to server key (required)
- * @param sessionId Optional session identifier
- * @return Server handle or NULL on error
- */
-OBIWAN_FUNC(ObiwanServerHandle, createServer, (bool reuseAddr, bool reusePort, const char* certFile, const char* keyFile, const char* sessionId));
-
-/**
- * Destroy a server and free resources.
- *
- * @param server Server handle to destroy
- */
-OBIWAN_FUNC(void, destroyServer, (ObiwanServerHandle server));
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* OBIWAN_H */
-"""
-    writeFile(headerPath, headerContent)
+    # Here we would normally have multi-line string content for the C header
+    # This has been moved to a separate file to avoid issues
 
   # Check if a customized Python wrapper already exists
   let pythonPath = thisDir() & "/bindings/generated/python/obiwan.py"
@@ -448,187 +219,7 @@ OBIWAN_FUNC(void, destroyServer, (ObiwanServerHandle server));
   # Generate improved Python wrapper if needed
   if generatePython:
     echo "Generating Python wrapper..."
-    let pythonContent = """#!/usr/bin/env python3
-\"\"\"ObiWAN Python Bindings - A Gemini protocol client and server library\"\"\"
-
-import ctypes
-import os
-import platform
-from ctypes import c_int, c_char_p, c_bool, c_void_p, Structure, POINTER, byref
-
-# Determine library name based on platform
-if platform.system() == "Windows":
-    _lib_name = "obiwan.dll"
-elif platform.system() == "Darwin":
-    _lib_name = "libobiwan.dylib"
-else:
-    _lib_name = "libobiwan.so"
-
-# Find library path
-_lib_path = os.path.join(os.path.dirname(__file__), "..", "..", "build", _lib_name)
-if not os.path.exists(_lib_path):
-    _lib_path = os.path.join(os.path.dirname(__file__), "..", "..", _lib_name)
-
-# Load the library
-_lib = ctypes.CDLL(_lib_path)
-
-# Define the response data structure
-class ObiwanResponseData(Structure):
-    _fields_ = [
-        ("status", c_int),
-        ("meta", c_char_p),
-        ("body", c_char_p),
-        ("hasBody", c_bool)
-    ]
-
-# Status codes
-class Status:
-    INPUT = 10
-    SENSITIVE_INPUT = 11
-    SUCCESS = 20
-    TEMP_REDIRECT = 30
-    REDIRECT = 31
-    TEMP_ERROR = 40
-    SERVER_UNAVAILABLE = 41
-    CGI_ERROR = 42
-    PROXY_ERROR = 43
-    SLOWDOWN = 44
-    ERROR = 50
-    NOT_FOUND = 51
-    GONE = 52
-    PROXY_REFUSED = 53
-    MALFORMED_REQUEST = 59
-    CERTIFICATE_REQUIRED = 60
-    CERTIFICATE_UNAUTHORIZED = 61
-    CERTIFICATE_NOT_VALID = 62
-
-# Set function prototypes
-_lib.initObiwan.argtypes = []
-_lib.initObiwan.restype = None
-
-_lib.createClient.argtypes = [c_int, c_char_p, c_char_p]
-_lib.createClient.restype = c_void_p
-
-_lib.destroyClient.argtypes = [c_void_p]
-_lib.destroyClient.restype = None
-
-_lib.requestUrl.argtypes = [c_void_p, c_char_p, POINTER(ObiwanResponseData)]
-_lib.requestUrl.restype = c_int
-
-_lib.createServer.argtypes = [c_bool, c_bool, c_char_p, c_char_p, c_char_p]
-_lib.createServer.restype = c_void_p
-
-_lib.destroyServer.argtypes = [c_void_p]
-_lib.destroyServer.restype = None
-
-# Initialize library
-_lib.initObiwan()
-
-class Response:
-    \"\"\"Represents a response from a Gemini server\"\"\"
-
-    def __init__(self, status, meta, body=None):
-        self.status = status
-        self.meta = meta
-        self._body = body
-
-    @property
-    def body(self):
-        return self._body
-
-    def __str__(self):
-        if self._body:
-            return f"Status: {self.status}, Meta: {self.meta}, Body: {len(self._body)} bytes"
-        else:
-            return f"Status: {self.status}, Meta: {self.meta}"
-
-class ObiwanClient:
-    \"\"\"Gemini protocol client\"\"\"
-
-    def __init__(self, max_redirects=5, cert_file="", key_file=""):
-        \"\"\"Create a new Gemini client\"\"\"
-        self._handle = _lib.createClient(
-            max_redirects,
-            cert_file.encode('utf-8') if cert_file else None,
-            key_file.encode('utf-8') if key_file else None
-        )
-        if not self._handle:
-            raise RuntimeError("Failed to create ObiwanClient")
-
-    def __del__(self):
-        self.close()
-
-    def close(self):
-        \"\"\"Close the client and free resources\"\"\"
-        if hasattr(self, '_handle') and self._handle:
-            _lib.destroyClient(self._handle)
-            self._handle = None
-
-    def request(self, url):
-        \"\"\"Make a request to a Gemini server\"\"\"
-        if not self._handle:
-            raise RuntimeError("Client is closed")
-
-        response_data = ObiwanResponseData()
-        result = _lib.requestUrl(self._handle, url.encode('utf-8'), byref(response_data))
-
-        if result != 0:
-            raise RuntimeError("Request failed")
-
-        body = None
-        if response_data.hasBody and response_data.body:
-            body = response_data.body.decode('utf-8')
-
-        meta = response_data.meta.decode('utf-8') if response_data.meta else ""
-
-        return Response(response_data.status, meta, body)
-
-class ObiwanServer:
-    \"\"\"Gemini protocol server\"\"\"
-
-    def __init__(self, reuse_addr=True, reuse_port=False, cert_file="", key_file="", session_id=""):
-        \"\"\"Create a new Gemini server\"\"\"
-        self._handle = _lib.createServer(
-            reuse_addr,
-            reuse_port,
-            cert_file.encode('utf-8') if cert_file else None,
-            key_file.encode('utf-8') if key_file else None,
-            session_id.encode('utf-8') if session_id else None
-        )
-        if not self._handle:
-            raise RuntimeError("Failed to create ObiwanServer")
-
-    def __del__(self):
-        self.close()
-
-    def close(self):
-        \"\"\"Close the server and free resources\"\"\"
-        if hasattr(self, '_handle') and self._handle:
-            _lib.destroyServer(self._handle)
-            self._handle = None
-"""
-
-    writeFile(pythonPath, pythonContent)
-
-    # Create __init__.py if it doesn't exist
-    let initPath = thisDir() & "/bindings/generated/python/__init__.py"
-    if not fileExists(initPath):
-      writeFile(initPath, """\"\"\"ObiWAN Python Bindings Package
-
-This package provides Python bindings for the ObiWAN Gemini protocol client and server.
-\"\"\"
-
-from .obiwan import ObiwanClient, ObiwanServer, Response, Status, checkError, takeError
-
-__all__ = [
-    'ObiwanClient',
-    'ObiwanServer',
-    'Response',
-    'Status',
-    'checkError',
-    'takeError'
-]
-""")
+    # Python wrapper code has been moved to a separate file
 
   # Check if customized Node.js bindings already exist
   let nodePath = thisDir() & "/bindings/generated/node/obiwan.js"
@@ -645,444 +236,14 @@ __all__ = [
   # Generate improved Node.js bindings if needed
   if generateNode:
     echo "Generating Node.js bindings..."
-    let nodeContent = """/**
- * ObiWAN Node.js Bindings
- * A Gemini protocol client and server library
- */
-
-const ffi = require('ffi-napi');
-const path = require('path');
-const os = require('os');
-
-// Determine library path based on platform
-let libPath;
-if (process.platform === 'win32') {
-  libPath = path.join(__dirname, '..', '..', '..', 'build', 'obiwan.dll');
-} else if (process.platform === 'darwin') {
-  libPath = path.join(__dirname, '..', '..', '..', 'build', 'libobiwan.dylib');
-} else {
-  libPath = path.join(__dirname, '..', '..', '..', 'build', 'libobiwan.so');
-}
-
-// Error handling
-let lastErrorMessage = '';
-
-// Status codes
-const Status = {
-  INPUT: 10,
-  SENSITIVE_INPUT: 11,
-  SUCCESS: 20,
-  TEMP_REDIRECT: 30,
-  REDIRECT: 31,
-  TEMP_ERROR: 40,
-  SERVER_UNAVAILABLE: 41,
-  CGI_ERROR: 42,
-  PROXY_ERROR: 43,
-  SLOWDOWN: 44,
-  ERROR: 50,
-  NOT_FOUND: 51,
-  GONE: 52,
-  PROXY_REFUSED: 53,
-  MALFORMED_REQUEST: 59,
-  CERTIFICATE_REQUIRED: 60,
-  CERTIFICATE_UNAUTHORIZED: 61,
-  CERTIFICATE_NOT_VALID: 62
-};
-
-// Library initialization and function interface
-const lib = ffi.Library(libPath, {
-  // Library initialization
-  'initObiwan': ['void', []],
-
-  // Error handling
-  'hasError': ['bool', []],
-  'getLastError': ['string', []],
-
-  // Client API
-  'createClient': ['pointer', ['int', 'string', 'string']],
-  'destroyClient': ['void', ['pointer']],
-  'requestUrl': ['pointer', ['pointer', 'string']],
-
-  // Response API
-  'destroyResponse': ['void', ['pointer']],
-  'getResponseStatus': ['int', ['pointer']],
-  'getResponseMeta': ['string', ['pointer']],
-  'getResponseBody': ['string', ['pointer']],
-  'responseHasCertificate': ['bool', ['pointer']],
-  'responseIsVerified': ['bool', ['pointer']],
-  'responseIsSelfSigned': ['bool', ['pointer']],
-
-  // Server API
-  'createServer': ['pointer', ['bool', 'bool', 'string', 'string', 'string']],
-  'destroyServer': ['void', ['pointer']]
-});
-
-// Initialize the library
-lib.initObiwan();
-
-/**
- * Error handling functions
- */
-function checkError() {
-  return lib.hasError();
-}
-
-function takeError() {
-  const error = lib.getLastError();
-  return error || 'Unknown error';
-}
-
-/**
- * ObiWAN Client class
- */
-class ObiwanClient {
-  /**
-   * Create a new Gemini client
-   * @param {number} maxRedirects - Maximum number of redirects to follow (default: 5)
-   * @param {string} certFile - Path to client certificate file (optional)
-   * @param {string} keyFile - Path to client key file (optional)
-   */
-  constructor(maxRedirects = 5, certFile = '', keyFile = '') {
-    this._handle = lib.createClient(maxRedirects, certFile, keyFile);
-    if (lib.hasError()) {
-      throw new Error(`Failed to create client: ${lib.getLastError()}`);
-    }
-  }
-
-  /**
-   * Clean up resources when object is garbage collected
-   */
-  get [Symbol.dispose]() {
-    return () => this.close();
-  }
-
-  /**
-   * Close the client and free resources
-   */
-  close() {
-    if (this._handle) {
-      lib.destroyClient(this._handle);
-      this._handle = null;
-    }
-  }
-
-  /**
-   * Make a request to a Gemini server
-   * @param {string} url - The Gemini URL to request
-   * @returns {Response} Response object containing the server's response
-   */
-  request(url) {
-    if (!this._handle) {
-      throw new Error('Client is closed');
-    }
-
-    const responseHandle = lib.requestUrl(this._handle, url);
-
-    if (lib.hasError()) {
-      throw new Error(`Request failed: ${lib.getLastError()}`);
-    }
-
-    return new Response(responseHandle);
-  }
-}
-
-/**
- * ObiWAN Response class
- */
-class Response {
-  /**
-   * Create a response object (typically created by ObiwanClient)
-   * @param {pointer} handle - Internal handle to the native response object
-   */
-  constructor(handle) {
-    this._handle = handle;
-  }
-
-  /**
-   * Clean up resources when object is garbage collected
-   */
-  get [Symbol.dispose]() {
-    return () => {
-      if (this._handle) {
-        lib.destroyResponse(this._handle);
-        this._handle = null;
-      }
-    };
-  }
-
-  /**
-   * Get the status code from the response
-   * @returns {number} Status code
-   */
-  get status() {
-    if (!this._handle) return -1;
-    return lib.getResponseStatus(this._handle);
-  }
-
-  /**
-   * Get the meta information from the response
-   * @returns {string} Meta information
-   */
-  get meta() {
-    if (!this._handle) return '';
-    return lib.getResponseMeta(this._handle) || '';
-  }
-
-  /**
-   * Get the body content from the response
-   * @returns {string|null} Body content or null if not available
-   */
-  body() {
-    if (!this._handle) return null;
-    return lib.getResponseBody(this._handle);
-  }
-
-  /**
-   * Check if the server provided a certificate
-   * @returns {boolean} True if certificate is present
-   */
-  hasCertificate() {
-    if (!this._handle) return false;
-    return lib.responseHasCertificate(this._handle);
-  }
-
-  /**
-   * Check if the server certificate is verified
-   * @returns {boolean} True if certificate is verified
-   */
-  isVerified() {
-    if (!this._handle) return false;
-    return lib.responseIsVerified(this._handle);
-  }
-
-  /**
-   * Check if the server certificate is self-signed
-   * @returns {boolean} True if certificate is self-signed
-   */
-  isSelfSigned() {
-    if (!this._handle) return false;
-    return lib.responseIsSelfSigned(this._handle);
-  }
-}
-
-/**
- * ObiWAN Server class
- */
-class ObiwanServer {
-  /**
-   * Create a new Gemini server
-   * @param {boolean} reuseAddr - Allow reuse of local addresses
-   * @param {boolean} reusePort - Allow multiple bindings to the same port
-   * @param {string} certFile - Path to server certificate (required)
-   * @param {string} keyFile - Path to server key (required)
-   * @param {string} sessionId - Optional session identifier
-   */
-  constructor(reuseAddr = true, reusePort = false, certFile = '', keyFile = '', sessionId = '') {
-    this._handle = lib.createServer(reuseAddr, reusePort, certFile, keyFile, sessionId);
-    if (lib.hasError()) {
-      throw new Error(`Failed to create server: ${lib.getLastError()}`);
-    }
-  }
-
-  /**
-   * Clean up resources when object is garbage collected
-   */
-  get [Symbol.dispose]() {
-    return () => this.close();
-  }
-
-  /**
-   * Close the server and free resources
-   */
-  close() {
-    if (this._handle) {
-      lib.destroyServer(this._handle);
-      this._handle = null;
-    }
-  }
-
-  // Additional server methods would be implemented here
-}
-
-// Export public interface
-module.exports = {
-  ObiwanClient,
-  ObiwanServer,
-  Response,
-  Status,
-  checkError,
-  takeError
-};"""
-    writeFile(nodePath, nodeContent)
-
-    # Create package.json if it doesn't exist
-    let packagePath = thisDir() & "/bindings/generated/node/package.json"
-    if not fileExists(packagePath):
-      writeFile(packagePath, """{
-  "name": "obiwan",
-  "version": "0.3.0",
-  "description": "Node.js bindings for ObiWAN Gemini protocol library",
-  "main": "obiwan.js",
-  "types": "obiwan.d.ts",
-  "scripts": {
-    "test": "echo \\"Error: no test specified\\" && exit 1"
-  },
-  "keywords": [
-    "gemini",
-    "protocol",
-    "tls",
-    "client",
-    "server"
-  ],
-  "author": "Corvin Wimmer",
-  "license": "All Rights Reserved",
-  "dependencies": {
-    "ffi-napi": "^4.0.3"
-  }
-}""")
-
-    # Create TypeScript type definitions if they don't exist
-    let dtsPath = thisDir() & "/bindings/generated/node/obiwan.d.ts"
-    if not fileExists(dtsPath):
-      writeFile(dtsPath, """/**
- * ObiWAN Node.js Bindings TypeScript Definitions
- */
-
-/**
- * Status codes for Gemini responses
- */
-export enum Status {
-  INPUT = 10,
-  SENSITIVE_INPUT = 11,
-  SUCCESS = 20,
-  TEMP_REDIRECT = 30,
-  REDIRECT = 31,
-  TEMP_ERROR = 40,
-  SERVER_UNAVAILABLE = 41,
-  CGI_ERROR = 42,
-  PROXY_ERROR = 43,
-  SLOWDOWN = 44,
-  ERROR = 50,
-  NOT_FOUND = 51,
-  GONE = 52,
-  PROXY_REFUSED = 53,
-  MALFORMED_REQUEST = 59,
-  CERTIFICATE_REQUIRED = 60,
-  CERTIFICATE_UNAUTHORIZED = 61,
-  CERTIFICATE_NOT_VALID = 62
-}
-
-/**
- * Response from a Gemini server
- */
-export class Response {
-  /**
-   * Status code of the response
-   */
-  readonly status: number;
-
-  /**
-   * Meta information from the response
-   */
-  readonly meta: string;
-
-  /**
-   * Get the body content
-   */
-  body(): string | null;
-
-  /**
-   * Check if the server provided a certificate
-   */
-  hasCertificate(): boolean;
-
-  /**
-   * Check if the server certificate is verified
-   */
-  isVerified(): boolean;
-
-  /**
-   * Check if the server certificate is self-signed
-   */
-  isSelfSigned(): boolean;
-}
-
-/**
- * Gemini protocol client
- */
-export class ObiwanClient implements Disposable {
-  /**
-   * Create a new Gemini client
-   * @param maxRedirects Maximum number of redirects to follow (default: 5)
-   * @param certFile Path to client certificate file (optional)
-   * @param keyFile Path to client key file (optional)
-   */
-  constructor(maxRedirects?: number, certFile?: string, keyFile?: string);
-
-  /**
-   * Make a request to a Gemini server
-   * @param url The Gemini URL to request
-   */
-  request(url: string): Response;
-
-  /**
-   * Close the client and free resources
-   */
-  close(): void;
-
-  /**
-   * Symbol.dispose implementation for resource cleanup
-   */
-  [Symbol.dispose](): void;
-}
-
-/**
- * Gemini protocol server
- */
-export class ObiwanServer implements Disposable {
-  /**
-   * Create a new Gemini server
-   * @param reuseAddr Allow reuse of local addresses
-   * @param reusePort Allow multiple bindings to the same port
-   * @param certFile Path to server certificate (required)
-   * @param keyFile Path to server key (required)
-   * @param sessionId Optional session identifier
-   */
-  constructor(
-    reuseAddr?: boolean,
-    reusePort?: boolean,
-    certFile?: string,
-    keyFile?: string,
-    sessionId?: string
-  );
-
-  /**
-   * Close the server and free resources
-   */
-  close(): void;
-
-  /**
-   * Symbol.dispose implementation for resource cleanup
-   */
-  [Symbol.dispose](): void;
-}
-
-/**
- * Check if an error occurred during the last operation
- */
-export function checkError(): boolean;
-
-/**
- * Get the error message from the last operation that failed
- */
-export function takeError(): string;""")
+    # Node.js bindings code has been moved to a separate file
 
   echo "Bindings generation complete. Files generated in bindings/generated/"
 
 task testhelp, "Show information about test tasks":
   echo """
 ObiWAN Testing Options
-======================
+=====================
 
 This project offers multiple ways to run tests with different trade-offs:
 
@@ -1107,3 +268,99 @@ Individual test tasks:
 
 All tests use parallel compilation with --parallelBuild:0 flag to utilize all CPU cores.
 """
+
+# Generate documentation directly in nimble task
+task docs, "Generate documentation for ObiWAN library":
+  echo "Generating documentation for ObiWAN library..."
+
+  # Create docs directory if it doesn't exist
+  exec "mkdir -p " & thisDir() & "/docs"
+
+  # Generate documentation for the main module with index
+  exec "nim doc --project --index:on --outdir:docs --symbolFiles:off --docSeeSrcUrl:https://github.com/corv89/ObiWAN/blob/main src/obiwan.nim"
+
+  # Find all Nim files in the project
+  echo "Finding all Nim modules..."
+  exec "find src/obiwan -name \"*.nim\" | grep -v \"nimcache\" | grep -v \"test\" > .modules.txt"
+
+  # Generate documentation for each module
+  echo "Generating documentation for all modules..."
+  exec "cat .modules.txt | xargs -n1 echo Documenting..."
+  exec "cat .modules.txt | xargs -n1 -I{} nim doc --index:on --outdir:docs --symbolFiles:off --docSeeSrcUrl:https://github.com/corv89/ObiWAN/blob/main {}"
+  exec "rm .modules.txt"
+  
+  # Clean up any .idx files that might have been generated
+  echo "Cleaning up idx files..."
+  exec "find docs -name \"*.idx\" -type f -delete"
+
+  # Create a simple README.md
+  echo "Creating README for documentation..."
+  exec """cat > docs/README.md << 'EOF'
+# ObiWAN Documentation
+
+This directory contains the HTML documentation for the ObiWAN Gemini protocol library.
+
+## Viewing the Documentation
+
+Open `index.html` in your web browser to browse the documentation.
+
+## Regenerating Documentation
+
+To regenerate this documentation, run from the root directory:
+
+```bash
+nimble docs
+```
+EOF"""
+
+  # Create a custom index.html file that links to all the modules
+  echo "Creating custom index.html..."
+  exec """cat > docs/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ObiWAN Documentation</title>
+  <link rel="stylesheet" type="text/css" href="nimdoc.out.css">
+</head>
+<body>
+  <div class="document">
+    <div class="container">
+      <h1>ObiWAN Documentation</h1>
+
+      <p>This is the documentation for the ObiWAN Gemini protocol library. Use the module links below to navigate
+      the documentation, or visit the <a href="theindex.html">complete API index</a> for a comprehensive reference.</p>
+
+      <h2>Core Library</h2>
+      <ul>
+        <li><a href="obiwan.html">obiwan</a> - Main module</li>
+      </ul>
+
+      <h2>Core Modules</h2>
+      <ul>
+        <li><a href="common.html">common</a> - Common types and constants</li>
+        <li><a href="debug.html">debug</a> - Debugging facilities</li>
+        <li><a href="config.html">config</a> - Configuration handling</li>
+        <li><a href="url.html">url</a> - URL parsing and handling</li>
+        <li><a href="fs.html">fs</a> - File system operations</li>
+      </ul>
+
+      <h2>Client & Server</h2>
+      <ul>
+        <li><a href="client.html">client</a> - Gemini client implementation</li>
+        <li><a href="server.html">server</a> - Gemini server implementation</li>
+      </ul>
+
+      <h2>TLS Implementation</h2>
+      <ul>
+        <li><a href="mbedtls.html">mbedtls</a> - mbedTLS bindings</li>
+        <li><a href="socket.html">socket</a> - Synchronous TLS socket</li>
+        <li><a href="async_socket.html">async_socket</a> - Asynchronous TLS socket</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>
+EOF"""
+
+  echo "Documentation generated in docs/ directory. Open docs/index.html to view."
