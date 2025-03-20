@@ -934,15 +934,10 @@ proc newObiwanServer*(reuseAddr = true; reusePort = false; certFile = "";
     # Parse the key - platform-specific implementation
     debug("Loading private key from: " & keyFile)
 
-    # Use platform-specific key file parsing
-    let ret2 = when defined(isMacOS):
-      # macOS requires 5 parameters
+    let ret2 =
       mbedtls.mbedtls_pk_parse_keyfile(
         addr actualContext.key, keyFile, nil,
         mbedtls.mbedtls_ctr_drbg_random, addr actualContext.ctr_drbg)
-    else:
-      # Linux only requires 3 parameters
-      mbedtls.mbedtls_pk_parse_keyfile(addr actualContext.key, keyFile, nil)
 
     if ret2 != 0:
       # Get a more detailed error message
@@ -1030,15 +1025,10 @@ proc newAsyncObiwanServer*(reuseAddr = true; reusePort = false; certFile = "";
     # Parse the key - platform-specific implementation
     debug("Loading private key from: " & keyFile)
 
-    # Use platform-specific key file parsing
-    let ret2 = when defined(isMacOS):
-      # macOS requires 5 parameters
+    let ret2 =
       mbedtls.mbedtls_pk_parse_keyfile(
         addr actualContext.key, keyFile, nil,
         mbedtls.mbedtls_ctr_drbg_random, addr actualContext.ctr_drbg)
-    else:
-      # Linux only requires 3 parameters
-      mbedtls.mbedtls_pk_parse_keyfile(addr actualContext.key, keyFile, nil)
 
     if ret2 != 0:
       # Get a more detailed error message
