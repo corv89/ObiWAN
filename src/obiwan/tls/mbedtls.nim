@@ -58,13 +58,13 @@ var
       header: "<mbedtls/net_sockets.h>".}: cint
   MBEDTLS_X509_BADCERT_NOT_TRUSTED* {.mbedtlsConstants,
       header: "<mbedtls/x509_crt.h>".}: cuint
-      
+
   # TLS 1.3 cipher suite constants - manually defined with their standard values
   # These are defined directly instead of imported because they might not be available in all builds
   MBEDTLS_TLS_AES_128_GCM_SHA256* = 0x1301.cint
   MBEDTLS_TLS_AES_256_GCM_SHA384* = 0x1302.cint
   MBEDTLS_TLS_CHACHA20_POLY1305_SHA256* = 0x1303.cint
-  
+
   # Max fragment length constants
   MBEDTLS_SSL_MAX_FRAG_LEN_512* = 1.cint
   MBEDTLS_SSL_MAX_FRAG_LEN_1024* = 2.cint
@@ -82,7 +82,7 @@ proc mbedtls_ssl_conf_authmode*(conf: ptr mbedtls_ssl_config,
     authmode: cint) {.mbedtls.}
 proc mbedtls_ssl_conf_ciphersuites*(conf: ptr mbedtls_ssl_config,
     ciphersuites: ptr cint) {.mbedtls.}
-proc mbedtls_ssl_conf_max_frag_len*(conf: ptr mbedtls_ssl_config, 
+proc mbedtls_ssl_conf_max_frag_len*(conf: ptr mbedtls_ssl_config,
     fragment_length: cint): cint {.mbedtls.}
 proc mbedtls_ssl_setup*(ssl: ptr mbedtls_ssl_context,
     conf: ptr mbedtls_ssl_config): cint {.mbedtls.}
@@ -107,15 +107,9 @@ proc mbedtls_x509_crt_parse_file*(crt: ptr mbedtls_x509_crt,
     path: cstring): cint {.mbedtlsCerts.}
 proc mbedtls_pk_init*(ctx: ptr mbedtls_pk_context) {.mbedtls.}
 # Import the platform-specific version of mbedtls_pk_parse_keyfile
-when defined(macosx) or defined(isMacOS):
-  # macOS version has 5 parameters
-  proc mbedtls_pk_parse_keyfile*(ctx: ptr mbedtls_pk_context, path: cstring, password: cstring,
-                                f_rng: pointer,
-                                    p_rng: pointer): cint {.mbedtls.}
-else:
-  # Linux version has 3 parameters
-  proc mbedtls_pk_parse_keyfile*(ctx: ptr mbedtls_pk_context, path: cstring,
-      password: cstring): cint {.mbedtls.}
+proc mbedtls_pk_parse_keyfile*(ctx: ptr mbedtls_pk_context, path: cstring, password: cstring,
+                              f_rng: pointer,
+                                  p_rng: pointer): cint {.mbedtls.}
 proc mbedtls_ssl_conf_own_cert*(conf: ptr mbedtls_ssl_config,
     cert: ptr mbedtls_x509_crt, key: ptr mbedtls_pk_context): cint {.mbedtls.}
 
