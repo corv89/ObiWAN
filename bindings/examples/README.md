@@ -2,6 +2,33 @@
 
 This directory contains examples of how to use the ObiWAN Gemini protocol library bindings from different languages.
 
+## Building and Running the Examples
+
+A Makefile is provided to make it easy to build and run the examples:
+
+```bash
+# Build the ObiWAN shared library first (if not already built)
+make library
+
+# Build all examples
+make
+
+# Clean the build
+make clean
+
+# Run the examples
+make run
+```
+
+### Building the Library Manually
+
+If you want to build the shared library manually:
+
+```bash
+# From the project root
+nimble bindings
+```
+
 ## C Example
 
 There are multiple ways to use the ObiWAN library from C:
@@ -27,32 +54,6 @@ Key advantages:
 - Allows for more flexible error handling
 - Can check if functions exist before using them
 
-### Recommended Approach: Dynamic Loading
-
-The most reliable and portable approach is to use dynamic loading with `dlopen`/`dlsym`:
-
-```c
-#include <dlfcn.h>
-
-// Load the library
-void* lib = dlopen("./libobiwan.so", RTLD_LAZY);
-if (lib) {
-    // Get function pointers
-    void (*initObiwan)(void) = dlsym(lib, "initObiwan");
-    bool (*hasError)(void) = dlsym(lib, "hasError");
-    // Use functions...
-    dlclose(lib);
-}
-```
-
-This approach:
-- Works consistently across all platforms (Linux, Windows, macOS)
-- Handles platform-specific symbol name differences automatically
-- Provides more robust error handling
-- Allows for flexible library discovery at runtime
-
-For a complete example, see `c_example_dlopen.c`.
-
 ### Standard Header Approach
 
 The ObiWAN header file (`obiwan.h`) uses a standard approach to declare functions:
@@ -67,6 +68,8 @@ This allows declarations like:
 ```c
 OBIWAN_FUNC(void, initObiwan, (void));
 ```
+
+The example `c_example.c` demonstrates this approach.
 
 #### Platform-Specific Considerations
 

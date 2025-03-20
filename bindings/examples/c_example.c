@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include "../generated/obiwan.h"
 
-int main() {
+int main(void) {
     printf("ObiWAN Gemini Client Example in C\n");
     printf("=================================\n\n");
 

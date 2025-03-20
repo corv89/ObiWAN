@@ -30,12 +30,18 @@ enum ObiwanStatus {
     OBIWAN_CERT_NOT_VALID = 62
 };
 
-int main() {
+int main(void) {
     printf("ObiWAN Gemini Client Example in C (dlopen version)\n");
     printf("=================================================\n\n");
 
-    // Load the library with full path
-    void* lib = dlopen("./build/libobiwan.so", RTLD_LAZY);
+    // Try to load the library from different locations
+    void* lib = dlopen("./libobiwan.so", RTLD_LAZY);
+    if (!lib) {
+        lib = dlopen("../build/libobiwan.so", RTLD_LAZY);
+    }
+    if (!lib) {
+        lib = dlopen("../../build/libobiwan.so", RTLD_LAZY);
+    }
     if (!lib) {
         printf("Error loading library: %s\n", dlerror());
         return 1;
