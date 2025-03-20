@@ -472,7 +472,7 @@ nimble testurl      # URL parsing tests
 
 - [ ] Gemini text format (text/gemini) parser
 - [x] Comprehensive test suite
-- [ ] Improved documentation
+- [x] Improved documentation
 - [x] Vendored mbedTLS 3.6.2
 - [x] TOML configuration file support
 - [x] Command-line argument parsing with docopt
