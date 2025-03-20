@@ -8,6 +8,8 @@
 - Sync server: `nimble server` or `nim c -o:build/server src/obiwan/server/sync.nim`
 - Async server: `nimble asyncserver` or `nim c -o:build/async_server src/obiwan/server/async.nim`
 - Run with args: `nim c -r src/obiwan/client/sync.nim gemini://server/path`
+- Generate documentation: `nimble docs`
+- Generate bindings: `nimble bindings`
 
 ## Code Style Guidelines
 - **Indentation**: 2 spaces

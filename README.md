@@ -407,6 +407,14 @@ if response.hasCertificate:
 
 ## API Documentation
 
+To generate the full API documentation, run:
+
+```bash
+nimble docs
+```
+
+This will create HTML documentation in the `docs/` directory. Open `docs/index.html` in your web browser to view it.
+
 ### Main Types
 
 - `ObiwanClient` / `AsyncObiwanClient`: Client interfaces
