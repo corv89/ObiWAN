@@ -189,8 +189,8 @@ proc initializeLogging*(config: Config) =
   ## Parameters:
   ##   config: The Config object containing logging settings
   
-  # Set verbosity level
-  debug.verbosityLevel = config.log.level
+  # Set verbosity level (no-op in current implementation to avoid linking issues)
+  debug.setVerbosityLevel(config.log.level)
   
   # TODO: Implement log file output when needed
   # For now, all logs go to stdout/stderr

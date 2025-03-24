@@ -624,7 +624,7 @@ proc serve*(server: ObiwanServer; port: int; callback: proc(request: Request);
 
   debug("Server bound to " & bindAddr & ":" & portStr & " using " & socketTypeMsg)
   # Only show server listening message if verbose level is 1 or higher
-  if obiwan.debug.verbosityLevel > 0:
+  if obiwan.debug.getVerbosityLevel() > 0:
     echo "Server listening on " & bindAddr & ":" & portStr & " using " & socketTypeMsg
 
   # Accept loop
@@ -795,7 +795,7 @@ proc serve*(server: AsyncObiwanServer; port: int; callback: proc(
   debug("Server listening on " & (if address == "" or address ==
       "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg)
   # Only show server listening message if verbose level is 1 or higher
-  if obiwan.debug.verbosityLevel > 0:
+  if obiwan.debug.getVerbosityLevel() > 0:
     echo "Async server listening on " & (if address == "" or address ==
         "0.0.0.0": "*" else: address) & ":" & $port & " using " & socketTypeMsg
 

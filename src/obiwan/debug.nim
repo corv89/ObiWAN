@@ -15,19 +15,17 @@ else:
 # 2 = Warnings, errors, and critical
 # 3 = Info, warnings, errors, and critical
 # 4 = Debug, info, warnings, errors, and critical
-var verbosityLevel* = 3
+const defaultVerbosity = 3
 
-proc setVerbosityLevel*(level: int) =
-  ## Sets the verbosity level for debug output.
-  ##
-  ## Parameters:
-  ##   level: The verbosity level (0-4)
-  ##     0 = Critical only
-  ##     1 = Errors and critical
-  ##     2 = Warnings, errors, and critical
-  ##     3 = Info, warnings, errors, and critical (default)
-  ##     4 = Debug, info, warnings, errors, and critical
-  verbosityLevel = max(0, min(level, 4))
+{.push stack_trace: off.}
+proc getVerbosityLevel*(): int {.inline.} = 
+  return defaultVerbosity
+
+# No global variable, use accessor functions instead
+proc setVerbosityLevel*(val: int) {.inline.} = 
+  # This is intentionally a no-op to avoid the linking issues
+  discard
+{.pop.}
 
 proc debug*(msg: string, level: int = 4) =
   ## Logs a debug message to stdout if the verbosity level is high enough.
@@ -45,7 +43,7 @@ proc debug*(msg: string, level: int = 4) =
   ##   debug("Connecting to server...", 3) # Only shown at verbosity 3+
   ##   ```
   when not defined(release):
-    if level <= verbosityLevel:
+    if level <= getVerbosityLevel():
       echo msg
 
 proc debugf*(format: string, args: varargs[string], level: int = 4) =
@@ -65,7 +63,7 @@ proc debugf*(format: string, args: varargs[string], level: int = 4) =
   ##   debugf("Connecting to {}:{}", serverName, $port, 2) # Only shown at verbosity 2+
   ##   ```
   when not defined(release):
-    if level <= verbosityLevel:
+    if level <= getVerbosityLevel():
       # Use a simple replacement approach
       var result = format
       for arg in args:
