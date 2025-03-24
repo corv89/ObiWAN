@@ -1,4 +1,5 @@
-FROM nimlang/nim:2.2.2-alpine
+# FROM nimlang/nim:2.2.2-alpine
+FROM akito13/nim:alpine
 
 WORKDIR /app
 
