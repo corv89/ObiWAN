@@ -5,28 +5,36 @@ switch("out", "build/")
 when defined(macosx):
   switch("define", "isMacOS")
 
-# mbedTLS configuration (using vendored mbedTLS)
-# Get the project root directory
+# mbedTLS configuration 
 import os
 let projectRoot = getCurrentDir()
 let mbedTLSRoot = projectRoot & "/vendor/mbedtls"
 
-# Use the vendored mbedTLS instead of system one
-switch("passC", "-I" & mbedTLSRoot & "/include")
-switch("define", "useMbedTLS")
+# Check whether to use system mbedTLS
+let useSystemMbedTLS = fileExists(projectRoot & "/USE_SYSTEM_MBEDTLS")
 
-# Compile mbedTLS libraries and link statically
-# This assumes we'll build the mbedTLS libraries separately
-when defined(macosx):
-  switch("passL", "-L" & mbedTLSRoot & "/library -Wl,-force_load " & 
-    mbedTLSRoot & "/library/libmbedtls.a -Wl,-force_load " & 
-    mbedTLSRoot & "/library/libmbedcrypto.a -Wl,-force_load " & 
-    mbedTLSRoot & "/library/libmbedx509.a")
+if useSystemMbedTLS:
+  # Use system mbedTLS
+  switch("define", "useSystemMbedTLS")
+  switch("define", "useMbedTLS")
+  # System mbedTLS libraries will be linked with -lmbedtls flags
 else:
-  switch("passL", "-L" & mbedTLSRoot & "/library -Wl,--whole-archive " & 
-    mbedTLSRoot & "/library/libmbedtls.a " & 
-    mbedTLSRoot & "/library/libmbedcrypto.a " & 
-    mbedTLSRoot & "/library/libmbedx509.a -Wl,--no-whole-archive")
+  # Use the vendored mbedTLS
+  switch("passC", "-I" & mbedTLSRoot & "/include")
+  switch("define", "useMbedTLS")
+  
+  # Compile mbedTLS libraries and link statically
+  # This assumes we'll build the mbedTLS libraries separately
+  when defined(macosx):
+    switch("passL", "-L" & mbedTLSRoot & "/library -Wl,-force_load " & 
+      mbedTLSRoot & "/library/libmbedtls.a -Wl,-force_load " & 
+      mbedTLSRoot & "/library/libmbedcrypto.a -Wl,-force_load " & 
+      mbedTLSRoot & "/library/libmbedx509.a")
+  else:
+    switch("passL", "-L" & mbedTLSRoot & "/library -Wl,--whole-archive " & 
+      mbedTLSRoot & "/library/libmbedtls.a " & 
+      mbedTLSRoot & "/library/libmbedcrypto.a " & 
+      mbedTLSRoot & "/library/libmbedx509.a -Wl,--no-whole-archive")
 
 # Optimization options
 when defined(release):

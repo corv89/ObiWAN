@@ -56,25 +56,17 @@ On Linux:
 sudo apt install nim
 ```
 
-### Installing ObiWAN dependencies
-
-This will let you generate bindings for languages other than Nim.
-
-```bash
-nimble develop
-```
-
 ### Installing ObiWAN
 
-Install the ObiWAN package if you want to call it from Nim.
+Install the ObiWAN package to compile or call it from Nim.
 
 ```bash
-nimble install https://github.com/corv89/ObiWAN
+nimble install
 ```
 
-Or add to your .nimble file:
+Or, in your project add to your .nimble file:
 ```
-requires "obiwan >= 0.1.0"
+requires "obiwan >= 0.6.0"
 ```
 
 ## Generating Certificates
@@ -97,7 +89,7 @@ First, build all the programs:
 nimble buildall
 ```
 
-Then you can run with the unified command-line interface:
+Then you can run with the command-line interface:
 
 ```bash
 # Show unified client help
@@ -346,7 +338,7 @@ proc main() =
     keyFile = "certs/privkey.pem",
     docRoot = "./content"  # Path to content directory
   )
-  
+
   # Start the server - it will automatically serve files from docRoot
   server.serve(1965)
 
@@ -468,9 +460,54 @@ nimble testtls      # TLS implementation tests
 nimble testurl      # URL parsing tests
 ```
 
+### Docker Support
+
+ObiWAN can be run using Docker with the included Dockerfile:
+
+```bash
+# Build the Docker image
+docker build -t obiwan .
+
+# Run the ObiWAN server container (with self-signed cert)
+docker run -p 1965:1965 obiwan
+
+# Run with custom content and certificates
+docker run -p 1965:1965 \
+  -v /path/to/content:/app/content \
+  -v /path/to/certs:/app/certs \
+  obiwan --docroot=/app/content --cert=/app/certs/cert.pem --key=/app/certs/key.pem
+
+# Run as a background service
+docker run -d -p 1965:1965 --name obiwan-server --restart unless-stopped obiwan
+```
+
+#### ARM64 Support (Apple Silicon M1/M2)
+
+For ARM64 systems, use platform emulation:
+
+```bash
+# Build and run with platform emulation
+docker build --platform linux/amd64 -t obiwan .
+docker run --platform linux/amd64 -p 1965:1965 obiwan
+```
+
+#### Building on Alpine Linux (musl libc)
+
+The Dockerfile uses Alpine Linux and configures ObiWAN to use system-provided mbedTLS libraries. To build manually on Alpine:
+
+```bash
+# 1. Install dependencies
+apk add mbedtls-dev build-base openssl openssl-dev pkgconfig nim
+
+# 2. Configure to use system mbedTLS
+./use_system_mbedtls.sh
+
+# 3. Build
+nimble buildall
+```
+
 ## Roadmap
 
-- [ ] Gemini text format (text/gemini) parser
 - [x] Comprehensive test suite
 - [x] Improved documentation
 - [x] Vendored mbedTLS 3.6.2
@@ -478,8 +515,15 @@ nimble testurl      # URL parsing tests
 - [x] Command-line argument parsing with docopt
 - [x] Unified client and server executables with sync/async modes
 - [x] Complete server implementation with file serving
-- [ ] CGI support
 - [x] MIME type detection
+- [ ] CGI support
+- [ ] Certificate management (autogeneration)
+- [ ] Proxy implementation (client and server)
+- [ ] Caching mechanisms for improved performance
+- [ ] Metrics and statistics collection
+- [ ] Rate limiting implementation (for Slowdown status)
+- [ ] Virtual hosting support
+- [ ] Access control and authorization framework
 
 ## License
 

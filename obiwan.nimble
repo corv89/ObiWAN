@@ -7,7 +7,7 @@ srcDir        = "src"
 
 # Dependencies
 
-requires "nim >= 2.2.2"
+requires "nim >= 2.2.0"
 requires "nimcrypto >= 0.6.2"
 requires "genny >= 0.1.0"
 requires "parsetoml >= 0.7.2"
@@ -19,22 +19,45 @@ task client, "Build ObiWAN client":
   exec "strip build/obiwan-client"
 
 task server, "Build ObiWAN server":
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-server src/obiwan/server.nim"
+  # Check if we're using system mbedTLS (for Docker builds)
+  if fileExists(thisDir() & "/USE_SYSTEM_MBEDTLS"):
+    echo "Using system-provided mbedTLS..."
+    exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -d:useSystemMbedTLS --passL:-lmbedtls --passL:-lmbedcrypto --passL:-lmbedx509 -o:build/obiwan-server src/obiwan/server.nim"
+  else:
+    # Use vendored mbedTLS
+    echo "Using vendored mbedTLS..."
+    exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-server src/obiwan/server.nim"
+
   exec "strip build/obiwan-server"
 
 task buildall, "Build all":
-  # First build mbedTLS if not already built
-  let mbedtlsLib = thisDir() & "/vendor/mbedtls/library/libmbedtls.a"
-  if not fileExists(mbedtlsLib):
-    echo "Building vendored mbedTLS first..."
-    exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
+  # Check if we should use system mbedTLS
+  let useSystemMbedTLS = fileExists(thisDir() & "/USE_SYSTEM_MBEDTLS")
+  
+  if not useSystemMbedTLS:
+    # First build mbedTLS if not already built
+    let mbedtlsLib = thisDir() & "/vendor/mbedtls/library/libmbedtls.a"
+    if not fileExists(mbedtlsLib):
+      echo "Building vendored mbedTLS first..."
+      exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
 
   # Now build the ObiWAN components with release mode, size optimizations, and LTO
   echo "Building unified client and server..."
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-client src/obiwan/client.nim"
-  exec "strip build/obiwan-client"
-  exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-server src/obiwan/server.nim"
-  exec "strip build/obiwan-server"
+  
+  if useSystemMbedTLS:
+    echo "Using system-provided mbedTLS..."
+    # Build with system mbedTLS
+    exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -d:useSystemMbedTLS --passL:-lmbedtls --passL:-lmbedcrypto --passL:-lmbedx509 -o:build/obiwan-client src/obiwan/client.nim"
+    exec "strip build/obiwan-client"
+    exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -d:useSystemMbedTLS --passL:-lmbedtls --passL:-lmbedcrypto --passL:-lmbedx509 -o:build/obiwan-server src/obiwan/server.nim"
+    exec "strip build/obiwan-server"
+  else:
+    # Build with vendored mbedTLS
+    echo "Using vendored mbedTLS..."
+    exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-client src/obiwan/client.nim"
+    exec "strip build/obiwan-client"
+    exec "nim c -d:release --opt:size --passC:-flto --passL:-flto -d:danger -o:build/obiwan-server src/obiwan/server.nim"
+    exec "strip build/obiwan-server"
 
 task test, "Run all tests in sequence":
   # First build mbedTLS if not already built
@@ -167,8 +190,14 @@ task testprotocol, "Run protocol compliance tests":
 
 task buildmbedtls, "Build the vendored mbedTLS library":
   echo "Building vendored mbedTLS 3.6.2..."
-  exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
-  echo "mbedTLS build complete."
+
+  if fileExists(thisDir() & "/USE_SYSTEM_MBEDTLS"):
+    echo "System mbedTLS will be used. No need to build vendored mbedTLS."
+    echo "To use vendored mbedTLS, delete the USE_SYSTEM_MBEDTLS file."
+  else:
+    echo "Building mbedTLS from source..."
+    exec "cd " & thisDir() & "/vendor/mbedtls && make -j lib"
+    echo "mbedTLS build complete."
 
 task bindings, "Generate C bindings for ObiWAN":
   # Create necessary directories
@@ -288,7 +317,7 @@ task docs, "Generate documentation for ObiWAN library":
   exec "cat .modules.txt | xargs -n1 echo Documenting..."
   exec "cat .modules.txt | xargs -n1 -I{} nim doc --index:on --outdir:docs --symbolFiles:off --docSeeSrcUrl:https://github.com/corv89/ObiWAN/blob/main {}"
   exec "rm .modules.txt"
-  
+
   # Clean up any .idx files that might have been generated
   echo "Cleaning up idx files..."
   exec "find docs -name \"*.idx\" -type f -delete"
