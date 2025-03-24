@@ -1,11 +1,21 @@
 # mbedTLS (3.6.2) C bindings
 
-{.pragma: mbedtls, importc, header: "<mbedtls/ssl.h>".}
-{.pragma: mbedtlsNetSockets, importc, header: "<mbedtls/net_sockets.h>".}
-{.pragma: mbedtlsCrypto, importc, header: "<mbedtls/entropy.h>".}
-{.pragma: mbedtlsRandom, importc, header: "<mbedtls/ctr_drbg.h>".}
-{.pragma: mbedtlsCerts, importc, header: "<mbedtls/x509_crt.h>".}
-{.pragma: mbedtlsPsa, importc, header: "<psa/crypto.h>".}
+when defined(useSystemMbedTLS):
+  # When using system libraries, use the standard include paths
+  {.pragma: mbedtls, importc, header: "<mbedtls/ssl.h>".}
+  {.pragma: mbedtlsNetSockets, importc, header: "<mbedtls/net_sockets.h>".}
+  {.pragma: mbedtlsCrypto, importc, header: "<mbedtls/entropy.h>".}
+  {.pragma: mbedtlsRandom, importc, header: "<mbedtls/ctr_drbg.h>".}
+  {.pragma: mbedtlsCerts, importc, header: "<mbedtls/x509_crt.h>".}
+  {.pragma: mbedtlsPsa, importc, header: "<psa/crypto.h>".}
+else:
+  # When using vendored mbedTLS, use our local include paths
+  {.pragma: mbedtls, importc, header: "<mbedtls/ssl.h>".}
+  {.pragma: mbedtlsNetSockets, importc, header: "<mbedtls/net_sockets.h>".}
+  {.pragma: mbedtlsCrypto, importc, header: "<mbedtls/entropy.h>".}
+  {.pragma: mbedtlsRandom, importc, header: "<mbedtls/ctr_drbg.h>".}
+  {.pragma: mbedtlsCerts, importc, header: "<mbedtls/x509_crt.h>".}
+  {.pragma: mbedtlsPsa, importc, header: "<psa/crypto.h>".}
 
 # Basic types
 type
@@ -133,7 +143,7 @@ proc mbedtls_net_bind*(ctx: ptr mbedtls_net_context, bind_ip: cstring,
     port: cstring, proto: cint): cint {.mbedtlsNetSockets.}
 proc mbedtls_net_accept*(bind_ctx: ptr mbedtls_net_context,
     client_ctx: ptr mbedtls_net_context, client_ip: cstring,
-    client_ip_len: csize_t, client_port: ptr uint16): cint {.mbedtlsNetSockets.}
+    client_ip_len: csize_t, client_ip_len_ptr: ptr csize_t): cint {.mbedtlsNetSockets.}
 proc mbedtls_net_free*(ctx: ptr mbedtls_net_context) {.mbedtlsNetSockets.}
 
 proc mbedtls_net_send*(ctx: pointer, buf: pointer,

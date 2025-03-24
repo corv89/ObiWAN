@@ -635,9 +635,11 @@ proc serve*(server: ObiwanServer; port: int; callback: proc(request: Request);
     var clientContext: mbedtls.mbedtls_net_context
     mbedtls.mbedtls_net_init(addr clientContext)
 
+    # Use an explicit csize_t variable for the size pointer to ensure compatibility with musl libc
+    var cip_len: csize_t = 0
     let acceptRet = mbedtls.mbedtls_net_accept(addr serverSocket,
                                            addr clientContext,
-                                           nil, 0, nil)
+                                           nil, 0, addr cip_len)
     if acceptRet != 0:
       debug("Failed to accept connection: " & $acceptRet)
       continue
