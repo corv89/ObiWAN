@@ -114,19 +114,19 @@ proc startTestServer(useIPv6: bool = false) =
 
   info("Starting test server on port " & $TestPort & (
       if useIPv6: " with IPv6" else: ""))
-  var args: seq[string] = @["c", "-r", "--hints:off", "--verbosity:0",
-                          "-d:debug", "--path:src", "tests/server_runner.nim"]
 
+  # Use pre-compiled server runner binary (compiled by nimble test task)
+  var args: seq[string] = @[]
   if useIPv6:
     args.add("-6") # Add IPv6 flag
 
   serverProcess = startProcess(
-    command = "nim",
+    command = "build/server_runner",
     args = args,
     options = {poUsePath, poStdErrToStdOut})
 
-  # Give the server time to start
-  sleep(2000)
+  # Give the server time to start (shorter since no compilation needed)
+  sleep(500)
   info("Test server started")
 
 proc stopTestServer() =

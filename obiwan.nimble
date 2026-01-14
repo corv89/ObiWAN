@@ -84,6 +84,7 @@ task test, "Run all tests in sequence":
     nim c --parallelBuild:0 -d:release -w:off --hints:off --path:src -o:build/test_client tests/test_client.nim &
     nim c --parallelBuild:0 -d:release -w:off --hints:off --path:src -o:build/test_real_server tests/test_real_server.nim &
     nim c --parallelBuild:0 -d:release -w:off --hints:off --path:src -o:build/test_fs tests/test_fs.nim &
+    nim c --parallelBuild:0 -d:release --hints:off --path:src -o:build/server_runner tests/server_runner.nim &
 
     # Wait for all compilations to complete
     wait

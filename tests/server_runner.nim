@@ -9,7 +9,6 @@
 # Import package modules
 import obiwan
 import obiwan/common
-import obiwan/server/sync
 import obiwan/debug
 import obiwan/tls/socket as tlsSocket
 
