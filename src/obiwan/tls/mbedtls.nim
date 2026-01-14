@@ -106,6 +106,7 @@ proc mbedtls_ssl_read*(ssl: ptr mbedtls_ssl_context, buf: pointer,
 proc mbedtls_ssl_write*(ssl: ptr mbedtls_ssl_context, buf: pointer,
     len: cuint): cint {.mbedtls.}
 proc mbedtls_ssl_close_notify*(ssl: ptr mbedtls_ssl_context): cint {.mbedtls.}
+proc mbedtls_ssl_free*(ssl: ptr mbedtls_ssl_context) {.mbedtls.}
 proc mbedtls_ssl_get_verify_result*(ssl: ptr mbedtls_ssl_context): cuint {.mbedtls.}
 proc mbedtls_ssl_get_peer_cert*(ssl: ptr mbedtls_ssl_context): ptr mbedtls_x509_crt {.mbedtls.}
 proc mbedtls_ssl_conf_verify*(conf: ptr mbedtls_ssl_config, f_vrfy: pointer,

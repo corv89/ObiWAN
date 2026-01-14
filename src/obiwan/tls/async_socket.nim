@@ -6,6 +6,9 @@ import strutils
 import ./socket
 import ../debug
 
+const
+  DefaultBufferSize* = 4096  ## Default size for TLS read buffer (4KB)
+
 # Helper functions for async socket waiting
 proc waitForReadable(socket: AsyncFD): Future[void] =
   ## Creates a Future that completes when the socket becomes readable.
@@ -61,6 +64,7 @@ type
     isSsl*: bool                                ## Whether TLS is enabled
     sock*: int ## AsyncFD representation (AsyncFD is an int wrapper)
     sslContext*: MbedtlsSslContext              ## SSL context for TLS operations
+    sslSession*: MbedtlsSslSession              ## Per-connection SSL session
     sslHandle*: ptr mbedtls.mbedtls_ssl_context ## Handle to mbedTLS SSL context
 
   ## Reference type for asynchronous TLS socket.
@@ -192,8 +196,11 @@ proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyn
   ## SNI (Server Name Indication), sets up the I/O callbacks, and performs
   ## the TLS handshake asynchronously, handling WANT_READ/WANT_WRITE conditions.
   ##
+  ## Creates a per-connection SSL session to avoid race conditions when
+  ## multiple connections share the same MbedtlsSslContext.
+  ##
   ## Parameters:
-  ##   context: The SSL context to use for the TLS session
+  ##   context: The shared SSL context (config, certs, entropy)
   ##   socket: The socket object to wrap with TLS
   ##   handshakeFunc: A function that performs either client or server handshake
   ##   hostname: The server hostname for SNI (Server Name Indication)
@@ -205,15 +212,18 @@ proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyn
   ##   This is an internal function used by the higher-level wrapConnectedSocket.
   ##   For self-signed certificates, verification failures with specific error
   ##   codes are accepted to support the Gemini protocol's security model.
-  debug("Starting async TLS session setup...")
+  debug("Starting async TLS session setup (per-connection context)...")
 
-  # Initialize SSL context
-  debug("Initializing SSL context")
-  mbedtls.mbedtls_ssl_init(addr context.context)
+  # Create per-connection SSL session (GC-managed)
+  var session = MbedtlsSslSession(sharedConfig: context)
 
-  # Setup SSL context with config
-  debug("Setting up SSL context with config")
-  let ret = mbedtls.mbedtls_ssl_setup(addr context.context, addr context.config)
+  # Initialize per-connection SSL context
+  debug("Initializing per-connection SSL context")
+  mbedtls.mbedtls_ssl_init(addr session.context)
+
+  # Setup SSL context with SHARED config
+  debug("Setting up SSL context with shared config")
+  let ret = mbedtls.mbedtls_ssl_setup(addr session.context, addr context.config)
   if ret != 0:
     var errorStr = newString(100)
     mbedtls.mbedtls_strerror(ret, cast[cstring](addr errorStr[0]), 100)
@@ -222,7 +232,7 @@ proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyn
 
   # Set hostname for SNI
   if hostname.len > 0:
-    let ret2 = mbedtls.mbedtls_ssl_set_hostname(addr context.context, hostname)
+    let ret2 = mbedtls.mbedtls_ssl_set_hostname(addr session.context, hostname)
     if ret2 != 0:
       var errorStr = newString(100)
       mbedtls.mbedtls_strerror(ret2, cast[cstring](addr errorStr[0]), 100)
@@ -255,19 +265,19 @@ proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyn
     except:
       return mbedtls.MBEDTLS_ERR_NET_RECV_FAILED
 
-  # Connect bio with socket
-  mbedtls.mbedtls_ssl_set_bio(addr context.context, cast[pointer](socket),
+  # Connect bio with per-connection SSL context
+  mbedtls.mbedtls_ssl_set_bio(addr session.context, cast[pointer](socket),
       asyncSend, asyncRecv, nil)
 
   # Perform SSL handshake (async)
-  var handshakeRet = handshakeFunc(addr context.context)
+  var handshakeRet = handshakeFunc(addr session.context)
   while handshakeRet == mbedtls.MBEDTLS_ERR_SSL_WANT_READ or
         handshakeRet == mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
     if handshakeRet == mbedtls.MBEDTLS_ERR_SSL_WANT_READ:
       await waitForReadable(asyncdispatch.AsyncFD(socket.sock))
     else:
       await waitForWritable(asyncdispatch.AsyncFD(socket.sock))
-    handshakeRet = handshakeFunc(addr context.context)
+    handshakeRet = handshakeFunc(addr session.context)
 
   if handshakeRet != 0:
     if handshakeRet == mbedtls.MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
@@ -278,8 +288,9 @@ proc wrapConnectedSocketObj*(context: MbedtlsSslContext, socket: ref MbedtlsAsyn
       mbedtls.mbedtls_strerror(handshakeRet, cast[cstring](addr errorStr[0]), 100)
       raise newException(OSError, "SSL handshake failed: " & errorStr)
 
-  # Store SSL handle and context in socket
-  socket.sslHandle = addr context.context
+  # Store per-connection SSL session and handle in socket
+  socket.sslSession = session  # GC ref keeps session alive
+  socket.sslHandle = addr session.context
   socket.sslContext = context
 
 # Convenient wrapper for ref version
@@ -440,12 +451,60 @@ proc recv*(socket: MbedtlsAsyncSocket, size: int): Future[string] {.async.} =
 
   return data
 
+proc fillBuffer(socket: MbedtlsAsyncSocket): Future[int] {.async.} =
+  ## Fills the socket's internal buffer with data from the TLS connection.
+  ##
+  ## This is an internal helper function for buffered reading. It reads
+  ## up to DefaultBufferSize bytes into the socket's buffer.
+  ##
+  ## Returns:
+  ##   Number of bytes read into the buffer, or 0 if connection closed.
+  ##
+  ## Raises:
+  ##   OSError: If there's an error reading from the socket
+  if socket.buffer.len > 0:
+    return socket.buffer.len  # Already have data in buffer
+
+  var tempBuf = newString(DefaultBufferSize)
+
+  while true:
+    debug("fillBuffer: attempting to read up to " & $DefaultBufferSize & " bytes")
+    var ret = mbedtls.mbedtls_ssl_read(socket.sslHandle,
+                                       cast[pointer](addr tempBuf[0]),
+                                       DefaultBufferSize.cuint)
+
+    if ret == mbedtls.MBEDTLS_ERR_SSL_WANT_READ:
+      debug("fillBuffer: SSL_WANT_READ, waiting...")
+      await waitForReadable(asyncdispatch.AsyncFD(socket.sock))
+      continue
+
+    if ret == mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
+      debug("fillBuffer: SSL_WANT_WRITE, waiting...")
+      await waitForWritable(asyncdispatch.AsyncFD(socket.sock))
+      continue
+
+    if ret == 0 or ret == mbedtls.MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+      debug("fillBuffer: connection closed")
+      return 0
+
+    if ret < 0:
+      var errorStr = newString(100)
+      mbedtls.mbedtls_strerror(ret, cast[cstring](addr errorStr[0]), 100)
+      debug("fillBuffer: error - " & errorStr)
+      raise newException(OSError, "Failed to fill buffer: " & errorStr)
+
+    # Successfully read data
+    tempBuf.setLen(ret)
+    socket.buffer = tempBuf
+    debug("fillBuffer: read " & $ret & " bytes into buffer")
+    return ret
+
 proc recvLine*(socket: MbedtlsAsyncSocket): Future[string] {.async.} =
   ## Asynchronously reads a line of text from a TLS-encrypted connection.
   ##
-  ## This function reads bytes one at a time until it encounters a newline character,
-  ## making it suitable for line-based protocols like Gemini. It automatically
-  ## handles CRLF line endings by trimming both CR and LF characters.
+  ## This function uses buffered I/O for efficiency, reading chunks of data
+  ## and scanning for newlines rather than reading one byte at a time.
+  ## It automatically handles CRLF line endings by trimming both CR and LF characters.
   ##
   ## Parameters:
   ##   socket: The TLS async socket to read from
@@ -463,21 +522,30 @@ proc recvLine*(socket: MbedtlsAsyncSocket): Future[string] {.async.} =
   ##   let response = await socket.recvLine()
   ##   echo "Received response header: ", response
   ##   ```
-  debug("Reading a line from async socket...")
+  debug("Reading a line from async socket (buffered)...")
   result = ""
+
   while true:
-    debug("Reading one byte...")
-    var c = await socket.recv(1)
-    if c.len == 0:
-      # We've been disconnected
-      debug("No more data available, returning current line")
-      if result.len == 0:
-        raise newException(EOFError, "Disconnected")
+    # Check buffer for newline
+    let nlPos = socket.buffer.find('\n')
+    if nlPos >= 0:
+      # Found newline in buffer - extract line including the newline
+      result.add(socket.buffer[0..nlPos])
+      socket.buffer = socket.buffer[nlPos+1..^1]
+      debug("Found newline in buffer at position " & $nlPos)
       break
 
-    result.add(c)
-    if c == "\n":
-      debug("Found end of line character")
+    # No newline in buffer - append what we have and get more
+    if socket.buffer.len > 0:
+      result.add(socket.buffer)
+      socket.buffer = ""
+
+    let filled = await socket.fillBuffer()
+    if filled == 0:
+      # Connection closed
+      debug("Connection closed, returning partial line of " & $result.len & " bytes")
+      if result.len == 0:
+        raise newException(EOFError, "Disconnected")
       break
 
   debug("Raw received line: " & $result.len & " bytes")
@@ -511,6 +579,12 @@ proc close*(socket: MbedtlsAsyncSocket) =
     if socket.sslHandle != nil:
       debug("Sending TLS close notify")
       discard mbedtls.mbedtls_ssl_close_notify(socket.sslHandle)
+      socket.sslHandle = nil
+
+    # Release per-connection SSL session (GC will call destructor to free SSL context)
+    if socket.sslSession != nil:
+      debug("Releasing per-connection SSL session")
+      socket.sslSession = nil
 
     # Unregister from async dispatcher if needed
     if socket.sock != -1:

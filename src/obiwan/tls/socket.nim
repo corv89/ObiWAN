@@ -4,6 +4,9 @@ import strutils
 import posix
 import ../debug
 
+const
+  SyncBufferSize* = 4096  ## Default size for TLS read buffer (4KB)
+
 type
   MbedtlsError* = object of CatchableError
 
@@ -11,7 +14,7 @@ type
   BaseSslContext* = ref object of RootObj
 
   MbedtlsSslContext* = ref object of BaseSslContext
-    context*: mbedtls.mbedtls_ssl_context
+    context*: mbedtls.mbedtls_ssl_context  # Deprecated: only used for shared config init
     config*: mbedtls.mbedtls_ssl_config
     entropy*: mbedtls.mbedtls_entropy_context
     ctr_drbg*: mbedtls.mbedtls_ctr_drbg_context
@@ -19,12 +22,30 @@ type
     cert*: mbedtls.mbedtls_x509_crt
     key*: mbedtls.mbedtls_pk_context
 
+  # Per-connection SSL session state (GC-managed)
+  # Each connection gets its own SSL context to avoid race conditions
+  MbedtlsSslSessionObj* = object
+    context*: mbedtls.mbedtls_ssl_context  # Per-connection TLS state
+    sharedConfig*: MbedtlsSslContext       # Reference to shared config (keeps it alive)
+
+  MbedtlsSslSession* = ref MbedtlsSslSessionObj
+
+# Destructor for MbedtlsSslSession - frees mbedTLS SSL context when GC collects
+proc `=destroy`(session: MbedtlsSslSessionObj) =
+  # Free the mbedTLS SSL context if it was initialized
+  # Note: We check if sharedConfig is nil to detect uninitialized sessions
+  if session.sharedConfig != nil:
+    mbedtls.mbedtls_ssl_free(unsafeAddr session.context)
+
+type
   # Base socket object without reference semantics
   MbedtlsSocketObj* = object
     fd*: cint     # Socket file descriptor
     domain*: cint # Socket domain
     sslContext*: MbedtlsSslContext
+    sslSession*: MbedtlsSslSession  # Per-connection SSL session
     sslHandle*: ptr mbedtls.mbedtls_ssl_context
+    buffer*: string  # Read buffer for buffered I/O
 
   # Based on Socket from net module - ref version of MbedtlsSocketObj
   MbedtlsSocket* = ref MbedtlsSocketObj
@@ -529,8 +550,11 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketO
   ## SNI (Server Name Indication), sets up the I/O callbacks, and performs
   ## the TLS handshake.
   ##
+  ## Creates a per-connection SSL session to avoid race conditions when
+  ## multiple connections share the same MbedtlsSslContext.
+  ##
   ## Parameters:
-  ##   context: The SSL context to use for the TLS session
+  ##   context: The shared SSL context (config, certs, entropy)
   ##   socket: The socket object to wrap with TLS
   ##   handshakeFunc: A function that performs either client or server handshake
   ##   hostname: The server hostname for SNI (Server Name Indication)
@@ -542,15 +566,18 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketO
   ##   This function is used internally by both client and server implementations.
   ##   For self-signed certificates, verification failures with specific error
   ##   codes are accepted to support the Gemini protocol's security model.
-  debug("Starting TLS session setup...")
+  debug("Starting TLS session setup (per-connection context)...")
 
-  # Initialize SSL context
-  debug("Initializing SSL context")
-  mbedtls.mbedtls_ssl_init(addr context.context)
+  # Create per-connection SSL session (GC-managed)
+  var session = MbedtlsSslSession(sharedConfig: context)
 
-  # Setup SSL context
-  debug("Setting up SSL context with config")
-  let ret = mbedtls.mbedtls_ssl_setup(addr context.context, addr context.config)
+  # Initialize the per-connection SSL context
+  debug("Initializing per-connection SSL context")
+  mbedtls.mbedtls_ssl_init(addr session.context)
+
+  # Setup SSL context with SHARED config
+  debug("Setting up SSL context with shared config")
+  let ret = mbedtls.mbedtls_ssl_setup(addr session.context, addr context.config)
   if ret != 0:
     debug("SSL setup error: " & $ret)
     raise mbedtlsError(ret, "Failed to setup SSL context")
@@ -558,7 +585,7 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketO
   # Set hostname for SNI
   if hostname.len > 0:
     debug("Setting SNI hostname: " & hostname)
-    let ret2 = mbedtls.mbedtls_ssl_set_hostname(addr context.context, hostname)
+    let ret2 = mbedtls.mbedtls_ssl_set_hostname(addr session.context, hostname)
     if ret2 != 0:
       debug("SSL set hostname error: " & $ret2)
       raise mbedtlsError(ret2, "Failed to set hostname")
@@ -566,13 +593,13 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketO
   # Set up BIO callbacks for socket I/O
   debug("Setting up BIO callbacks, socket FD: " & $socket.fd)
   # Pass the socket itself as the context for our BIO functions
-  mbedtls.mbedtls_ssl_set_bio(addr context.context, cast[pointer](addr socket),
+  mbedtls.mbedtls_ssl_set_bio(addr session.context, cast[pointer](addr socket),
                             cast[pointer](my_bio_send), cast[pointer](
                                 my_bio_recv), nil)
 
   # Perform SSL handshake
   debug("Starting SSL handshake...")
-  let handshakeRet = handshakeFunc(addr context.context)
+  let handshakeRet = handshakeFunc(addr session.context)
   if handshakeRet != 0:
     debug("SSL handshake returned error code: " & $handshakeRet)
     if handshakeRet == mbedtls.MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
@@ -584,9 +611,10 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketO
   else:
     debug("SSL handshake completed successfully")
 
-  # Store SSL handle in socket
-  debug("Storing SSL context in socket")
-  socket.sslHandle = addr context.context
+  # Store per-connection SSL session and handle in socket
+  debug("Storing per-connection SSL session in socket")
+  socket.sslSession = session  # GC ref keeps session alive
+  socket.sslHandle = addr session.context
   socket.sslContext = context
 
   # Verify the socket FD is still valid
@@ -594,7 +622,7 @@ proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: var MbedtlsSocketO
   if socket.fd < 0:
     raise newException(MbedtlsError, "Invalid socket FD after handshake: " & $socket.fd)
 
-  debug("TLS session setup complete")
+  debug("TLS session setup complete (per-connection context)")
 
 # Convenient overload for ref MbedtlsSocket
 proc wrapConnectedSocket*(context: MbedtlsSslContext, socket: MbedtlsSocket,
@@ -937,8 +965,61 @@ proc recv*(socket: MbedtlsSocket, data: pointer, size: int): int =
   return ret
 
 # Convenience functions for recv operations
+
+proc fillBufferSync(socket: MbedtlsSocket): int =
+  ## Fills the socket's internal buffer with data from the TLS connection.
+  ##
+  ## This is an internal helper function for buffered reading. It reads
+  ## up to SyncBufferSize bytes into the socket's buffer.
+  ##
+  ## Returns:
+  ##   Number of bytes read into the buffer, or 0 if connection closed.
+  ##
+  ## Raises:
+  ##   MbedtlsError: If there's an error reading from the socket
+  if socket.buffer.len > 0:
+    return socket.buffer.len  # Already have data in buffer
+
+  var tempBuf = newString(SyncBufferSize)
+
+  debug("fillBufferSync: attempting to read up to " & $SyncBufferSize & " bytes")
+  let ret = mbedtls.mbedtls_ssl_read(socket.sslHandle,
+                                     cast[pointer](addr tempBuf[0]),
+                                     SyncBufferSize.cuint)
+
+  if ret == 0 or ret == mbedtls.MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+    debug("fillBufferSync: connection closed")
+    return 0
+
+  if ret < 0:
+    if ret == mbedtls.MBEDTLS_ERR_SSL_WANT_READ or
+       ret == mbedtls.MBEDTLS_ERR_SSL_WANT_WRITE:
+      debug("fillBufferSync: WANT_READ/WANT_WRITE, returning 0")
+      return 0
+    raise mbedtlsError(ret.int, "Failed to fill buffer")
+
+  # Successfully read data
+  tempBuf.setLen(ret)
+  socket.buffer = tempBuf
+  debug("fillBufferSync: read " & $ret & " bytes into buffer")
+  return ret
+
 proc recvLine*(socket: MbedtlsSocket): string =
-  debug("Reading a line from socket...")
+  ## Reads a line from a TLS-encrypted socket connection.
+  ##
+  ## This function uses buffered I/O for efficiency, reading chunks of data
+  ## and scanning for newlines rather than reading one byte at a time.
+  ## It automatically handles CRLF line endings by trimming both CR and LF characters.
+  ##
+  ## Parameters:
+  ##   socket: The TLS socket to read from
+  ##
+  ## Returns:
+  ##   The line read from the socket, with trailing CR and LF characters removed
+  ##
+  ## Raises:
+  ##   MbedtlsError: If the socket is invalid or there's an error reading
+  debug("Reading a line from socket (buffered)...")
 
   # Verify socket pointer
   if socket.isNil:
@@ -950,31 +1031,27 @@ proc recvLine*(socket: MbedtlsSocket): string =
     debug("ERROR: Invalid socket FD in recvLine: " & $socket.fd)
     raise newException(MbedtlsError, "Invalid socket FD in recvLine: " & $socket.fd)
 
-  # Initialize a buffer to store the line
   result = ""
 
-  # Read one byte at a time until we find a newline
-  var buffer = newString(1)
   while true:
-    # Make sure the buffer has space
-    buffer[0] = '\0'
-
-    # Read 1 byte
-    debug("Reading one byte...")
-    let ret = socket.recv(addr buffer[0], 1)
-
-    # Check for errors or EOF
-    if ret <= 0:
-      debug("No more data available, returning current line")
+    # Check buffer for newline
+    let nlPos = socket.buffer.find('\n')
+    if nlPos >= 0:
+      # Found newline in buffer - extract line including the newline
+      result.add(socket.buffer[0..nlPos])
+      socket.buffer = socket.buffer[nlPos+1..^1]
+      debug("Found newline in buffer at position " & $nlPos)
       break
 
-    # Append the byte to the result
-    let c = buffer[0]
-    result.add(c)
+    # No newline in buffer - append what we have and get more
+    if socket.buffer.len > 0:
+      result.add(socket.buffer)
+      socket.buffer = ""
 
-    # Break if we found a newline
-    if c == '\n':
-      debug("Found end of line character")
+    let filled = socket.fillBufferSync()
+    if filled == 0:
+      # Connection closed or would block
+      debug("fillBufferSync returned 0, returning partial line of " & $result.len & " bytes")
       break
 
   debug("Raw received line: " & $result.len & " bytes")
@@ -993,6 +1070,11 @@ proc close*(socket: MbedtlsSocket) =
     if socket.sslHandle != nil:
       debug("Sending TLS close notify")
       discard mbedtls.mbedtls_ssl_close_notify(socket.sslHandle)
+      socket.sslHandle = nil
+    # Release per-connection SSL session (GC will call destructor to free SSL context)
+    if socket.sslSession != nil:
+      debug("Releasing per-connection SSL session")
+      socket.sslSession = nil
     # Just close the socket directly
     socket.fd = -1
     debug("Socket closed")
